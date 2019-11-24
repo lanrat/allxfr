@@ -1,80 +1,79 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"log"
-	"net"
+	"os"
 
 	"github.com/miekg/dns"
+	"golang.org/x/sync/errgroup"
 )
 
-type root struct {
-	// map of TLDs to nameservers
-	tld map[string][]string
-	// map of nameservers to ipv4 and ipv6
-	ip map[string][]net.IP
-}
-
-func (r *root) AddTLD(tld, nameserver string) {
-	if r.tld == nil {
-		r.tld = make(map[string][]string)
-	}
-	_, ok := r.tld[tld]
-	if !ok {
-		r.tld[tld] = make([]string, 0, 4)
-	}
-	r.tld[tld] = append(r.tld[tld], nameserver)
-}
-
-func (r *root) AddIP(nameserver string, ip net.IP) {
-	if r.ip == nil {
-		r.ip = make(map[string][]net.IP)
-	}
-	_, ok := r.ip[nameserver]
-	if !ok {
-		r.ip[nameserver] = make([]net.IP, 0, 4)
-	}
-	r.ip[nameserver] = append(r.ip[nameserver], ip)
-}
-
-func (r *root) Print() {
-	fmt.Println("NS:")
-	for zone := range r.tld {
-		fmt.Printf("%s\n", zone)
-		for i := range r.tld[zone] {
-			fmt.Printf("\t%s\n", r.tld[zone][i])
-		}
-	}
-	fmt.Println("IP:")
-	for ns := range r.ip {
-		fmt.Printf("%s\n", ns)
-		for i := range r.ip[ns] {
-			fmt.Printf("\t%s\n", r.ip[ns][i])
-		}
-	}
-}
-
-func (r *root) PrintTree() {
-	fmt.Println("Zones:")
-	for zone := range r.tld {
-		fmt.Printf("%s\n", zone)
-		for i := range r.tld[zone] {
-			fmt.Printf("\t%s\n", r.tld[zone][i])
-			for j := range r.ip[r.tld[zone][i]] {
-				fmt.Printf("\t\t%s\n", r.ip[r.tld[zone][i]][j])
-			}
-		}
-	}
-}
+var (
+	initialNameserver = flag.String("ns", "", "initial nameserver to use to get the root")
+	parallel          = flag.Uint("parallel", 10, "number of parallel zone transfers to perform")
+	saveDir           = flag.String("out", ".", "directory to save found zones in")
+	verbose           = flag.Bool("verbose", false, "enable verbose output")
+)
 
 func main() {
-	server, err := getRootServer()
+	flag.Parse()
+	localNameserver, err := getInitialNameserver()
+	check(err)
+	if *verbose {
+		log.Printf("Using initial nameserver %s", localNameserver)
+	}
+	rootNameservers, err := getRootServers(localNameserver)
 	check(err)
 
-	log.Printf("using server %s", server)
-	err = rootAXFR(server)
+	var root zone
+	// not all the root nameservers allow AXFR, try them until we find one that does
+	for _, ns := range rootNameservers {
+		if *verbose {
+			log.Printf("Trying root nameserver %s", ns)
+		}
+		root, err = rootAXFR(ns)
+		if err == nil {
+			break
+		}
+	}
+	if root.CountNS() == 0 {
+		log.Fatal("Got empty root zone")
+	}
+
+	// create outpout dir if does not exist
+	if _, err := os.Stat(*saveDir); os.IsNotExist(err) {
+		err = os.MkdirAll(*saveDir, os.ModePerm)
+		check(err)
+	}
+
+	if *verbose {
+		root.PrintTree()
+	}
+	rootChan := root.GetNsIPChan()
+	var g errgroup.Group
+
+	// start workers
+	for i := uint(0); i < *parallel; i++ {
+		g.Go(func() error { return worker(rootChan) })
+	}
+
+	err = g.Wait()
 	check(err)
-	log.Printf("done")
+}
+
+func worker(c chan nsip) error {
+	for {
+		r, more := <-c
+		if !more {
+			return nil
+		}
+		err := axfr(r.domain, r.ns, r.ip)
+		if err != nil {
+			return err
+		}
+	}
 }
 
 func check(err error) {
@@ -83,67 +82,17 @@ func check(err error) {
 	}
 }
 
-func rootAXFR(ns string) error {
-	m := new(dns.Msg)
-	m.SetQuestion(".", dns.TypeAXFR)
-
-	t := new(dns.Transfer)
-
-	var root root
-
-	env, err := t.In(m, fmt.Sprintf("%s:53", ns))
-	if err != nil {
-		return err
-	}
-	var envelope, record int
-	for e := range env {
-		//fmt.Println("envelope loop") // 108, contains abut 200 records
-		if e.Error != nil {
-			return e.Error
+func getInitialNameserver() (string, error) {
+	var server string
+	if len(*initialNameserver) == 0 {
+		// get root server from local DNS
+		conf, err := dns.ClientConfigFromFile("/etc/resolv.conf")
+		if err != nil {
+			return "", err
 		}
-		for _, r := range e.RR {
-			//fmt.Println("RR loop") // 22077
-			//fmt.Printf("IAN: %s\n", r)
-			switch t := r.(type) {
-			case *dns.A:
-				root.AddIP(t.Hdr.Name, t.A)
-			case *dns.AAAA:
-				root.AddIP(t.Hdr.Name, t.AAAA)
-			case *dns.NS:
-				root.AddTLD(t.Hdr.Name, t.Ns)
-			}
-		}
-		record += len(e.RR)
-		envelope++
+		server = fmt.Sprintf("%s:%s", conf.Servers[0], conf.Port)
+	} else {
+		server = fmt.Sprintf("%s:53", *initialNameserver)
 	}
-	log.Printf("\n;; xfr size: %d records (envelopes %d)\n", record, envelope)
-
-	root.PrintTree()
-	return nil
-}
-
-var ErrNoRoot = fmt.Errorf("Unable to find Root Server")
-
-func getRootServer() (string, error) {
-	// get root server from local DNS
-	conf, err := dns.ClientConfigFromFile("/etc/resolv.conf")
-	if err != nil {
-		return "", err
-	}
-	localserver := fmt.Sprintf("%s:%s", conf.Servers[0], conf.Port)
-
-	// get root servers
-	m := new(dns.Msg)
-	m.SetQuestion(".", dns.TypeNS)
-	in, err := dns.Exchange(m, localserver)
-	if err != nil {
-		return "", err
-	}
-	//fmt.Println(in)
-	for _, a := range in.Answer {
-		if ns, ok := a.(*dns.NS); ok {
-			return ns.Ns, nil
-		}
-	}
-	return "", ErrNoRoot
+	return server, nil
 }
