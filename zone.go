@@ -22,6 +22,10 @@ func (z *zone) GetNsIPChan() chan nsip {
 	out := make(chan nsip)
 	go func() {
 		for domain := range z.ns {
+			// skip root
+			if domain == "." {
+				continue
+			}
 			for _, ns := range z.ns[domain] {
 				for _, ip := range z.ip[ns] {
 					out <- nsip{domain: domain, ns: ns, ip: ip}
