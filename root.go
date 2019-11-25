@@ -46,14 +46,7 @@ func rootAXFR(ns string) (zone, error) {
 			return root, fmt.Errorf("transfer envelope error from %v: %w", ns, e.Error)
 		}
 		for _, r := range e.RR {
-			switch t := r.(type) {
-			case *dns.A:
-				root.AddIP(t.Hdr.Name, t.A)
-			case *dns.AAAA:
-				root.AddIP(t.Hdr.Name, t.AAAA)
-			case *dns.NS:
-				root.AddTLD(t.Hdr.Name, t.Ns)
-			}
+			root.AddRecord(r)
 		}
 		record += len(e.RR)
 		envelope++

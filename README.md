@@ -10,6 +10,8 @@ Most zones do not allow zone transfers, however a few do. Sometimes only on a si
 
 This tool works best on an IPv4/IPv6 dual stack internet connection.
 
+Providing a zone file with the `-zonefile` flag will attempt a transfer with the domains and sub-domains in the zone file provided.
+
 ## Example
 
 ```
@@ -45,13 +47,15 @@ This tool works best on an IPv4/IPv6 dual stack internet connection.
 ```
 Usage of ./allxfr:
   -ns string
-        initial nameserver to use to get the root
+        nameserver to use to get the root, if not set system default is used
   -out string
         directory to save found zones in (default ".")
   -parallel uint
         number of parallel zone transfers to perform (default 10)
   -verbose
         enable verbose output
+  -zonefile string
+        use the provided zonefile instead of getting the root zonefile
 ```
 
 ## Building

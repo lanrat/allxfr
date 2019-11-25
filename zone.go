@@ -3,6 +3,8 @@ package main
 import (
 	"fmt"
 	"net"
+
+	"github.com/miekg/dns"
 )
 
 type zone struct {
@@ -16,6 +18,17 @@ type nsip struct {
 	domain string
 	ns     string
 	ip     net.IP
+}
+
+func (z *zone) AddRecord(r dns.RR) {
+	switch t := r.(type) {
+	case *dns.A:
+		z.AddIP(t.Hdr.Name, t.A)
+	case *dns.AAAA:
+		z.AddIP(t.Hdr.Name, t.AAAA)
+	case *dns.NS:
+		z.AddTLD(t.Hdr.Name, t.Ns)
+	}
 }
 
 func (z *zone) GetNsIPChan() chan nsip {
