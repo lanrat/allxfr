@@ -35,7 +35,7 @@ func axfr(zone, nameserver string, ip net.IP) error {
 	}
 
 	// get ready to save file
-	filename := fmt.Sprintf("%s/%s_%s_%s.zone.gz", *saveDir, zone, nameserver, ip.String())
+	filename := fmt.Sprintf("%s/%s_%s_%s_zone.gz", *saveDir, zone, nameserver, ip.String())
 	filenameTmp := fmt.Sprintf("%s.tmp", filename)
 	fi, err := os.Create(filenameTmp)
 	if err != nil {
