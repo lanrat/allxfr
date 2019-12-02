@@ -19,6 +19,7 @@ var (
 )
 
 func main() {
+	log.SetFlags(0)
 	flag.Parse()
 	localNameserver, err := getNameserver()
 	check(err)

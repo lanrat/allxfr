@@ -35,8 +35,11 @@ func (z *zone) GetNsIPChan() chan nsip {
 	out := make(chan nsip)
 	go func() {
 		for domain := range z.ns {
-			// skip root
+			// skip root & arpa
 			if domain == "." {
+				continue
+			}
+			if domain == "arpa." {
 				continue
 			}
 			for _, ns := range z.ns[domain] {
