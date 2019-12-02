@@ -4,6 +4,7 @@ import (
 	"compress/gzip"
 	"github.com/miekg/dns"
 	"io"
+	"log"
 	"os"
 	"strings"
 )
@@ -25,6 +26,7 @@ func parseZoneFile(filename string) (zone, error) {
 		fileReader = gz
 		defer gz.Close()
 	}
+	log.Printf("parsing zonefile: %s\n", filename)
 	zp := dns.NewZoneParser(fileReader, "", "")
 	for rr, ok := zp.Next(); ok; rr, ok = zp.Next() {
 		z.AddRecord(rr)
@@ -33,5 +35,6 @@ func parseZoneFile(filename string) (zone, error) {
 	if err := zp.Err(); err != nil {
 		return z, err
 	}
-	return z, err
+	log.Printf("zonefile parsing done")
+	return z, nil
 }

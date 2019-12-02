@@ -58,6 +58,8 @@ func main() {
 		check(err)
 	}
 
+	// TODO print size and keep track of progress
+
 	if *verbose {
 		z.PrintTree()
 	}
