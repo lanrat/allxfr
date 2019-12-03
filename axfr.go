@@ -27,7 +27,7 @@ func axfr(zone, nameserver string, ip net.IP) error {
 	env, err := t.In(m, fmt.Sprintf("%s:53", ipString))
 	if err != nil {
 		// skip on this error
-		err = fmt.Errorf("transfer error from %s (%s): %w", nameserver, ip.String(), err)
+		err = fmt.Errorf("transfer error from zone: %s nameserver: %s (%s): %w", zone, nameserver, ip.String(), err)
 		if *verbose {
 			log.Print(err)
 		}
@@ -48,7 +48,7 @@ func axfr(zone, nameserver string, ip net.IP) error {
 	for e := range env {
 		if e.Error != nil {
 			// skip on this error
-			err = fmt.Errorf("transfer envelope error from %v: %w", nameserver, e.Error)
+			err = fmt.Errorf("transfer envelope error from zone: %s nameserver: %s (rec: %d, envelope: %d): %w", zone, nameserver, record, envelope, e.Error)
 			if *verbose {
 				log.Print(err)
 			}
