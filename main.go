@@ -2,8 +2,8 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"log"
+	"net"
 	"os"
 
 	"github.com/miekg/dns"
@@ -11,7 +11,7 @@ import (
 )
 
 var (
-	nameserver = flag.String("ns", "", "nameserver to use to get the root, if not set system default is used")
+	nameserver = flag.String("ns", "", "nameserver to use to get the root, if not set system default is used, may contain port")
 	parallel   = flag.Uint("parallel", 10, "number of parallel zone transfers to perform")
 	saveDir    = flag.String("out", ".", "directory to save found zones in")
 	verbose    = flag.Bool("verbose", false, "enable verbose output")
@@ -64,6 +64,7 @@ func main() {
 	if *verbose {
 		z.PrintTree()
 	}
+
 	rootChan := z.GetNsIPChan()
 	var g errgroup.Group
 
@@ -103,9 +104,14 @@ func getNameserver() (string, error) {
 		if err != nil {
 			return "", err
 		}
-		server = fmt.Sprintf("%s:%s", conf.Servers[0], conf.Port)
+		server = net.JoinHostPort(conf.Servers[0], conf.Port)
 	} else {
-		server = fmt.Sprintf("%s:53", *nameserver)
+		host, port, err := net.SplitHostPort(*nameserver)
+		if err != nil {
+			server = net.JoinHostPort(*nameserver, "53")
+		} else {
+			server = net.JoinHostPort(host, port)
+		}
 	}
 	return server, nil
 }

@@ -4,9 +4,9 @@
 
 <img src="https://user-images.githubusercontent.com/164192/69487828-764bc280-0e15-11ea-8f67-41dd27ac32d8.jpg" width="400" height="300">
 
-This tool performs a [zone transfer (AXFR)](https://en.wikipedia.org/wiki/DNS_zone_transfer) against the root zone servers to obtain the [root zone file](https://www.iana.org/domains/root/files). And then attempts a zone transfer for every IP for every nameserver for a given zone.
+This tool performs a [zone transfer (AXFR)](https://en.wikipedia.org/wiki/DNS_zone_transfer) against the root zone servers to obtain the [root zone file](https://www.iana.org/domains/root/files). And then attempts opportunistic zone transfers for every IP for every nameserver for a given zone. Additionally, each NS/A/AAAA record is also re-queried to find additional servers or IPs not included as root glue.
 
-Most zones do not allow zone transfers, however a few do. Sometimes only on a single IP for a given nameserver and not the others. This tool will try them all and save every successful transfer.
+Most zones do not allow zone transfers, however a few do. Sometimes only on a single IP for a given nameserver and not the others, and sometimes only for servers or IPs that are authorative but not incluided in the root zones. This tool will try them all and save every successful transfer.
 
 This tool works best on an IPv4/IPv6 dual stack internet connection.
 
@@ -47,15 +47,15 @@ Providing a zone file with the `-zonefile` flag will attempt a transfer with the
 ```
 Usage of ./allxfr:
   -ns string
-        nameserver to use to get the root, if not set system default is used
+    	nameserver to use to get the root, if not set system default is used, may contain port
   -out string
-        directory to save found zones in (default ".")
+    	directory to save found zones in (default ".")
   -parallel uint
-        number of parallel zone transfers to perform (default 10)
+    	number of parallel zone transfers to perform (default 10)
   -verbose
-        enable verbose output
+    	enable verbose output
   -zonefile string
-        use the provided zonefile instead of getting the root zonefile
+    	use the provided zonefile instead of getting the root zonefile
 ```
 
 ## Building

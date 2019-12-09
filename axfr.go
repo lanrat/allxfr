@@ -18,13 +18,9 @@ func axfr(zone, nameserver string, ip net.IP) error {
 	m := new(dns.Msg)
 	m.SetQuestion(zone, dns.TypeAXFR)
 
-	ipString := ip.String()
-	if ip.To4() == nil {
-		ipString = fmt.Sprintf("[%s]", ipString)
-	}
 
 	t := new(dns.Transfer)
-	env, err := t.In(m, fmt.Sprintf("%s:53", ipString))
+	env, err := t.In(m, net.JoinHostPort(ip.String(), "53"))
 	if err != nil {
 		// skip on this error
 		err = fmt.Errorf("transfer error from zone: %s nameserver: %s (%s): %w", zone, nameserver, ip.String(), err)
