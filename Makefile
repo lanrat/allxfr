@@ -5,9 +5,15 @@ CC := CGO_ENABLED=0 go build -trimpath -a -installsuffix cgo
 SOURCES := $(shell find . -maxdepth 1 -type f -name '*.go')
 BIN := allxfr
 
-.PHONY: all fmt docker clean
+.PHONY: all fmt docker docker-unbound clean
 
 all: allxfr
+
+docker-unbound: unbound/Dockerfile
+	docker build -t="lanrat/unbound" unbound/
+
+run-unbound:
+	docker run -it --rm --name unbound -p 5053:5053/udp lanrat/unbound
 
 docker: Dockerfile
 	docker build -t="lanrat/allxfr" .
