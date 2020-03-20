@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"net"
+	"strings"
 
 	"github.com/miekg/dns"
 )
@@ -38,6 +39,7 @@ func queryNS(server, domain string) ([]string, error) {
 			if *verbose {
 				log.Printf("\t%s\n", t.Ns)
 			}
+			t.Ns = strings.ToLower(t.Ns)
 			out = append(out, t.Ns)
 		}
 	}

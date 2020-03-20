@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"net"
+	"strings"
 
 	"github.com/miekg/dns"
 )
@@ -53,20 +54,23 @@ func (z *zone) CountNS() int {
 	return len(z.ns)
 }
 
-func (z *zone) AddNS(tld, nameserver string) {
+func (z *zone) AddNS(domain, nameserver string) {
+	domain = strings.ToLower(domain)
 	if z.ns == nil {
 		z.ns = make(map[string][]string)
 	}
-	_, ok := z.ns[tld]
+	_, ok := z.ns[domain]
 	if !ok {
-		z.ns[tld] = make([]string, 0, 4)
+		z.ns[domain] = make([]string, 0, 4)
 	}
 	if len(nameserver) > 0 {
-		z.ns[tld] = append(z.ns[tld], nameserver)
+		nameserver = strings.ToLower(nameserver)
+		z.ns[domain] = append(z.ns[domain], nameserver)
 	}
 }
 
 func (z *zone) AddIP(nameserver string, ip net.IP) {
+	nameserver = strings.ToLower(nameserver)
 	if z.ip == nil {
 		z.ip = make(map[string][]net.IP)
 	}
