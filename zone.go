@@ -61,7 +61,9 @@ func (z *zone) AddNS(tld, nameserver string) {
 	if !ok {
 		z.ns[tld] = make([]string, 0, 4)
 	}
-	z.ns[tld] = append(z.ns[tld], nameserver)
+	if len(nameserver) > 0 {
+		z.ns[tld] = append(z.ns[tld], nameserver)
+	}
 }
 
 func (z *zone) AddIP(nameserver string, ip net.IP) {

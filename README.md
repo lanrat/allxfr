@@ -12,6 +12,8 @@ This tool works best on an IPv4/IPv6 dual stack internet connection.
 
 Providing a zone file with the `-zonefile` flag will attempt a transfer with the domains and sub-domains in the zone file provided.
 
+TLDs in the [Public Suffix List](https://publicsuffix.org/) can be attempted as well with the `-psl` flag.
+
 ## Running with a resolver
 
 When running allxfr with a fully recursive caching resolver like BIND/named or Unbound additional zones may be found. You can enable this behavior with the `-ns` flag.
@@ -59,6 +61,8 @@ Usage of ./allxfr:
         directory to save found zones in (default "zones")
   -parallel uint
         number of parallel zone transfers to perform (default 10)
+ -psl
+        attempt AXFR from zones listed in the public suffix list, requires -ns
   -save-all
         attempt AXFR from every nameserfer for a given zone and save all answers
   -verbose

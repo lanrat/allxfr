@@ -18,6 +18,7 @@ var (
 	zonefile = flag.String("zonefile", "", "use the provided zonefile instead of getting the root zonefile")
 	ns       = flag.String("ns", "", "nameserver to use for manualy querying of records not in zone file")
 	saveAll  = flag.Bool("save-all", false, "attempt AXFR from every nameserfer for a given zone and save all answers")
+	psl      = flag.Bool("psl", false, "attempt AXFR from zones listed in the public suffix list, requires -ns")
 )
 
 var (
@@ -58,6 +59,17 @@ func main() {
 
 	if z.CountNS() == 0 {
 		log.Fatal("Got empty zone")
+	}
+
+	if *psl {
+		pslDomains, err := getPSLDomsins()
+		check(err)
+		for _, domain := range pslDomains {
+			z.AddNS(domain, "")
+		}
+		if *verbose {
+			log.Printf("added %d domains from PSL\n", len(pslDomains))
+		}
 	}
 
 	// create outpout dir if does not exist

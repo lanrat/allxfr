@@ -14,7 +14,8 @@ import (
 // axfrWorker iterate through all possabilities and queries attempting an AXFR
 func axfrWorker(z zone, domain string) error {
 	ips := make(map[string]bool)
-	filename := fmt.Sprintf("%s/%s.zone.gz", *saveDir, domain)
+	domain = dns.Fqdn(domain)
+	filename := fmt.Sprintf("%s/%s.zone.gz", *saveDir, domain[:len(domain)-1])
 	for _, nameserver := range z.ns[domain] {
 		for _, ip := range z.ip[nameserver] {
 			ipString := string(ip.To16())
