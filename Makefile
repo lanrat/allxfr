@@ -1,7 +1,6 @@
 # creates static binaries
 CC := CGO_ENABLED=0 go build -trimpath -a -installsuffix cgo
 
-#MODULE_SOURCES := $(shell find */ -type f -name '*.go' )
 SOURCES := $(shell find . -maxdepth 1 -type f -name '*.go')
 BIN := allxfr
 
@@ -13,7 +12,7 @@ docker-unbound: unbound/Dockerfile
 	docker build -t="lanrat/unbound" unbound/
 
 run-unbound:
-	docker run -it --rm --name unbound -p 5053:5053/udp lanrat/unbound
+	docker run -it --rm --name unbound -p 127.0.0.1:5053:5053/udp lanrat/unbound
 
 docker: Dockerfile
 	docker build -t="lanrat/allxfr" .
