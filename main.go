@@ -19,6 +19,7 @@ var (
 	ns       = flag.String("ns", "", "nameserver to use for manualy querying of records not in zone file")
 	saveAll  = flag.Bool("save-all", false, "attempt AXFR from every nameserfer for a given zone and save all answers")
 	psl      = flag.Bool("psl", false, "attempt AXFR from zones listed in the public suffix list, requires -ns")
+	ixfr     = flag.Bool("ixfr", false, "attempt an IXFR instead of AXFR")
 )
 
 var (

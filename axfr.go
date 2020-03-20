@@ -79,7 +79,11 @@ func axfr(zone, nameserver string, ip net.IP, filename string) (int64, error) {
 		log.Printf("Trying AXFR: %s %s %s", zone, nameserver, ip.String())
 	}
 	m := new(dns.Msg)
-	m.SetQuestion(zone, dns.TypeAXFR)
+	if *ixfr {
+		m.SetIxfr(zone, 0, "", "")
+	} else {
+		m.SetQuestion(zone, dns.TypeAXFR)
+	}
 
 	t := new(dns.Transfer)
 	t.DialTimeout = globalTimeout
@@ -140,7 +144,7 @@ func axfr(zone, nameserver string, ip net.IP, filename string) (int64, error) {
 		envelope++
 	}
 	if record > 1 {
-		log.Printf("%s %s (%s) xfr size: %d records (envelopes %d)\n", zone, nameserver, ip.String(), record, envelope)
+		log.Printf("%s %s (%s) xfr size: %d records\n", zone, nameserver, ip.String(), record)
 	}
 	if err != nil {
 		return record, err

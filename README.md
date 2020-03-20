@@ -55,16 +55,18 @@ An example Docker configureation for Unbound is provided in the `unbound/` direc
 
 ```
 Usage of ./allxfr:
+  -ixfr
+        attempt an IXFR instead of AXFR
   -ns string
-        nameserver to use for manualy querying of records not in zone file
+        nameserver to use for manualy querying of records not in zone fi
   -out string
         directory to save found zones in (default "zones")
   -parallel uint
         number of parallel zone transfers to perform (default 10)
- -psl
-        attempt AXFR from zones listed in the public suffix list, requires -ns
+  -psl
+        attempt AXFR from zones listed in the public suffix list, requir
   -save-all
-        attempt AXFR from every nameserfer for a given zone and save all answers
+        attempt AXFR from every nameserfer for a given zone and save all
   -verbose
         enable verbose output
   -zonefile string
