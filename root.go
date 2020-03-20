@@ -51,7 +51,7 @@ func rootAXFR(ns string) (zone, error) {
 		record += len(e.RR)
 		envelope++
 	}
-	log.Printf("ROOT xfr size: %d records (envelopes %d)\n", record, envelope)
+	log.Printf("ROOT %s xfr size: %d records\n", ns, record)
 
 	return root, nil
 }

@@ -40,7 +40,8 @@ func (z *zone) GetNameChan() chan string {
 			if domain == "." {
 				continue
 			}
-			if domain == "arpa." {
+			parts := strings.Split(domain, ".")
+			if parts[len(parts)-1] == "arpa" {
 				continue
 			}
 			out <- domain
