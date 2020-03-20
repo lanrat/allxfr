@@ -14,11 +14,11 @@ type zone struct {
 	ip map[string][]net.IP
 }
 
-type nsip struct {
+/*type nsip struct {
 	domain string
 	ns     string
 	ip     net.IP
-}
+}*/
 
 func (z *zone) AddRecord(r dns.RR) {
 	switch t := r.(type) {
@@ -27,12 +27,12 @@ func (z *zone) AddRecord(r dns.RR) {
 	case *dns.AAAA:
 		z.AddIP(t.Hdr.Name, t.AAAA)
 	case *dns.NS:
-		z.AddTLD(t.Hdr.Name, t.Ns)
+		z.AddNS(t.Hdr.Name, t.Ns)
 	}
 }
 
-func (z *zone) GetNsIPChan() chan nsip {
-	out := make(chan nsip)
+func (z *zone) GetNameChan() chan string {
+	out := make(chan string)
 	go func() {
 		for domain := range z.ns {
 			// skip root & arpa
@@ -42,11 +42,7 @@ func (z *zone) GetNsIPChan() chan nsip {
 			if domain == "arpa." {
 				continue
 			}
-			for _, ns := range z.ns[domain] {
-				for _, ip := range z.ip[ns] {
-					out <- nsip{domain: domain, ns: ns, ip: ip}
-				}
-			}
+			out <- domain
 		}
 		close(out)
 	}()
@@ -57,7 +53,7 @@ func (z *zone) CountNS() int {
 	return len(z.ns)
 }
 
-func (z *zone) AddTLD(tld, nameserver string) {
+func (z *zone) AddNS(tld, nameserver string) {
 	if z.ns == nil {
 		z.ns = make(map[string][]string)
 	}

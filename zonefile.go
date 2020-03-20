@@ -2,11 +2,12 @@ package main
 
 import (
 	"compress/gzip"
-	"github.com/miekg/dns"
 	"io"
 	"log"
 	"os"
 	"strings"
+
+	"github.com/miekg/dns"
 )
 
 func parseZoneFile(filename string) (zone, error) {

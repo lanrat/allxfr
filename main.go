@@ -5,32 +5,40 @@ import (
 	"log"
 	"net"
 	"os"
+	"time"
 
 	"github.com/miekg/dns"
 	"golang.org/x/sync/errgroup"
 )
 
 var (
-	nameserver = flag.String("ns", "", "nameserver to use to get the root, if not set system default is used, may contain port")
-	parallel   = flag.Uint("parallel", 10, "number of parallel zone transfers to perform")
-	saveDir    = flag.String("out", ".", "directory to save found zones in")
-	verbose    = flag.Bool("verbose", false, "enable verbose output")
-	zonefile   = flag.String("zonefile", "", "use the provided zonefile instead of getting the root zonefile")
+	parallel = flag.Uint("parallel", 10, "number of parallel zone transfers to perform")
+	saveDir  = flag.String("out", "zones", "directory to save found zones in")
+	verbose  = flag.Bool("verbose", false, "enable verbose output")
+	zonefile = flag.String("zonefile", "", "use the provided zonefile instead of getting the root zonefile")
+	ns       = flag.String("ns", "", "nameserver to use for manualy querying of records not in zone file")
+	saveAll  = flag.Bool("save-all", false, "attempt AXFR from every nameserfer for a given zone and save all answers")
+)
+
+var (
+	localNameserver string
+	globalTimeout   = 5 * time.Second
 )
 
 func main() {
 	log.SetFlags(0)
 	flag.Parse()
-	localNameserver, err := getNameserver()
+	var err error
+	localNameserver, err = getNameserver()
 	check(err)
 	if *verbose {
 		log.Printf("Using initial nameserver %s", localNameserver)
 	}
-	rootNameservers, err := getRootServers(localNameserver)
-	check(err)
 
 	var z zone
 	if len(*zonefile) == 0 {
+		rootNameservers, err := getRootServers()
+		check(err)
 		// get zone file from root AXFR
 		// not all the root nameservers allow AXFR, try them until we find one that does
 		for _, ns := range rootNameservers {
@@ -46,7 +54,6 @@ func main() {
 		// zone file is provided
 		z, err = parseZoneFile(*zonefile)
 		check(err)
-
 	}
 
 	if z.CountNS() == 0 {
@@ -59,31 +66,32 @@ func main() {
 		check(err)
 	}
 
-	// TODO print size and keep track of progress
-
 	if *verbose {
 		z.PrintTree()
 	}
 
-	rootChan := z.GetNsIPChan()
+	zoneChan := z.GetNameChan()
 	var g errgroup.Group
 
 	// start workers
 	for i := uint(0); i < *parallel; i++ {
-		g.Go(func() error { return worker(rootChan) })
+		g.Go(func() error { return worker(z, zoneChan) })
 	}
 
 	err = g.Wait()
 	check(err)
+	if *verbose {
+		log.Printf("exiting normally\n")
+	}
 }
 
-func worker(c chan nsip) error {
+func worker(z zone, c chan string) error {
 	for {
-		r, more := <-c
+		domain, more := <-c
 		if !more {
 			return nil
 		}
-		err := axfr(r.domain, r.ns, r.ip)
+		err := axfrWorker(z, domain)
 		if err != nil {
 			return err
 		}
@@ -96,9 +104,10 @@ func check(err error) {
 	}
 }
 
+// getNameserver returns the nameserver passed via flag if provided, if not returns the system's NS
 func getNameserver() (string, error) {
 	var server string
-	if len(*nameserver) == 0 {
+	if len(*ns) == 0 {
 		// get root server from local DNS
 		conf, err := dns.ClientConfigFromFile("/etc/resolv.conf")
 		if err != nil {
@@ -106,9 +115,9 @@ func getNameserver() (string, error) {
 		}
 		server = net.JoinHostPort(conf.Servers[0], conf.Port)
 	} else {
-		host, port, err := net.SplitHostPort(*nameserver)
+		host, port, err := net.SplitHostPort(*ns)
 		if err != nil {
-			server = net.JoinHostPort(*nameserver, "53")
+			server = net.JoinHostPort(*ns, "53")
 		} else {
 			server = net.JoinHostPort(host, port)
 		}

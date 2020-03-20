@@ -7,12 +7,12 @@ import (
 	"github.com/miekg/dns"
 )
 
-func getRootServers(localserver string) ([]string, error) {
+func getRootServers() ([]string, error) {
 	out := make([]string, 0, 4)
 	// get root servers
 	m := new(dns.Msg)
 	m.SetQuestion(".", dns.TypeNS)
-	in, err := dns.Exchange(m, localserver)
+	in, err := dns.Exchange(m, localNameserver)
 	if err != nil {
 		return out, err
 	}
