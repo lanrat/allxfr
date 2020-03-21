@@ -11,6 +11,6 @@ FROM alpine
 
 COPY --from=build-env /go/app/allxfr /bin/allxfr
 
-USER nobody
+USER 1000
 
 ENTRYPOINT ["allxfr"]
