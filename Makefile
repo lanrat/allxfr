@@ -1,5 +1,5 @@
 # creates static binaries
-CC := CGO_ENABLED=0 go build -trimpath -a -installsuffix cgo
+CC := CGO_ENABLED=0 go build -ldflags "-w -s" -trimpath -a -installsuffix cgo
 
 SOURCES := $(shell find . -maxdepth 1 -type f -name '*.go')
 BIN := allxfr
