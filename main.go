@@ -17,15 +17,19 @@ var (
 	verbose  = flag.Bool("verbose", false, "enable verbose output")
 	zonefile = flag.String("zonefile", "", "use the provided zonefile instead of getting the root zonefile")
 	ns       = flag.String("ns", "", "nameserver to use for manualy querying of records not in zone file")
-	saveAll  = flag.Bool("save-all", false, "attempt AXFR from every nameserfer for a given zone and save all answers")
-	psl      = flag.Bool("psl", false, "attempt AXFR from zones listed in the public suffix list, requires -ns")
+	saveAll  = flag.Bool("save-all", false, "attempt AXFR from every nameserver for a given zone and save all answers")
+	psl      = flag.Bool("psl", false, "attempt AXFR from zones listed in the public suffix list, requires -ns flag")
 	ixfr     = flag.Bool("ixfr", false, "attempt an IXFR instead of AXFR")
 	dryRun   = flag.Bool("dry-run", false, "only test if xfr is allowed by retrieving one envelope")
 )
 
 var (
 	localNameserver string
-	globalTimeout   = 5 * time.Second
+	totalXFR        uint32
+)
+
+const (
+	globalTimeout = 5 * time.Second
 )
 
 func main() {
@@ -38,6 +42,7 @@ func main() {
 		log.Printf("Using initial nameserver %s", localNameserver)
 	}
 
+	start := time.Now()
 	var z zone
 	if len(*zonefile) == 0 {
 		rootNameservers, err := getRootServers()
@@ -96,6 +101,8 @@ func main() {
 
 	err = g.Wait()
 	check(err)
+	took := time.Since(start).Round(time.Second / 1000)
+	log.Printf("%d / %d transferred in %s\n", totalXFR, len(z.ns), took.String())
 	if *verbose {
 		log.Printf("exiting normally\n")
 	}

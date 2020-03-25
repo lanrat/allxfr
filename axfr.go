@@ -7,6 +7,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"sync/atomic"
 	"time"
 
 	"github.com/miekg/dns"
@@ -83,6 +84,7 @@ func axfr(domain, nameserver string, ip net.IP, filename string) (int64, error) 
 	if err == nil && records > 0 {
 		took := time.Since(startTime).Round(time.Second / 1000)
 		log.Printf("%s %s (%s) xfr size: %d records in %s\n", domain, nameserver, ip.String(), records, took.String())
+		atomic.AddUint32(&totalXFR, 1)
 
 	}
 	return records, err

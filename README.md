@@ -47,6 +47,7 @@ pg. ns1.tiare.net.pg. (202.165.192.23) xfr size: 447 records in 409ms
 mw. domwe.sdn.mw. (41.87.5.162) xfr size: 1538 records in 938ms
 xn--j1amh. tier1.num.net.ua. (193.110.163.134) xfr size: 1055 records in 1.349s
 sv. cir.red.sv. (168.243.254.1) xfr size: 1514 records in 883ms
+21 / 1516 transfered in 3m29.92
 ```
 
 ## Usage
@@ -54,7 +55,7 @@ sv. cir.red.sv. (168.243.254.1) xfr size: 1514 records in 883ms
 ```
 Usage of ./allxfr:
   -dry-run
-        just test if zone transfer is allowed, do not perform or save the zone transfer
+        only test if xfr is allowed by retrieving one envelope
   -ixfr
         attempt an IXFR instead of AXFR
   -ns string
@@ -64,9 +65,9 @@ Usage of ./allxfr:
   -parallel uint
         number of parallel zone transfers to perform (default 10)
   -psl
-        attempt AXFR from zones listed in the public suffix list, requires -ns
+        attempt AXFR from zones listed in the public suffix list, requires -ns flag
   -save-all
-        attempt AXFR from every nameserfer for a given zone and save all answers
+        attempt AXFR from every nameserver for a given zone and save all answers
   -verbose
         enable verbose output
   -zonefile string
