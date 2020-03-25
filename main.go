@@ -20,6 +20,7 @@ var (
 	saveAll  = flag.Bool("save-all", false, "attempt AXFR from every nameserfer for a given zone and save all answers")
 	psl      = flag.Bool("psl", false, "attempt AXFR from zones listed in the public suffix list, requires -ns")
 	ixfr     = flag.Bool("ixfr", false, "attempt an IXFR instead of AXFR")
+	dryRun   = flag.Bool("dry-run", false, "only test if xfr is allowed by retrieving one envelope")
 )
 
 var (
@@ -74,9 +75,11 @@ func main() {
 	}
 
 	// create outpout dir if does not exist
-	if _, err := os.Stat(*saveDir); os.IsNotExist(err) {
-		err = os.MkdirAll(*saveDir, os.ModePerm)
-		check(err)
+	if !*dryRun {
+		if _, err := os.Stat(*saveDir); os.IsNotExist(err) {
+			err = os.MkdirAll(*saveDir, os.ModePerm)
+			check(err)
+		}
 	}
 
 	if *verbose {

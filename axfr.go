@@ -127,6 +127,9 @@ func axfrToFile(zone string, ip net.IP, filename string) (int64, error) {
 			err = nil
 			break
 		}
+		if *dryRun && len(e.RR) > 0 {
+			return int64(len(e.RR)), nil
+		}
 		for _, r := range e.RR {
 			// create file here on first iteration of loop
 			if bufWriter == nil {
