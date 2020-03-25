@@ -82,7 +82,7 @@ func axfr(domain, nameserver string, ip net.IP, filename string) (int64, error) 
 	startTime := time.Now()
 	records, err := axfrToFile(domain, ip, filename)
 	if err == nil && records > 0 {
-		took := time.Since(startTime).Round(time.Second / 1000)
+		took := time.Since(startTime).Round(time.Millisecond)
 		log.Printf("%s %s (%s) xfr size: %d records in %s\n", domain, nameserver, ip.String(), records, took.String())
 		atomic.AddUint32(&totalXFR, 1)
 

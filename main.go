@@ -101,7 +101,7 @@ func main() {
 
 	err = g.Wait()
 	check(err)
-	took := time.Since(start).Round(time.Second / 1000)
+	took := time.Since(start).Round(time.Millisecond)
 	log.Printf("%d / %d transferred in %s\n", totalXFR, len(z.ns), took.String())
 	if *verbose {
 		log.Printf("exiting normally\n")

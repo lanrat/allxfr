@@ -53,7 +53,7 @@ func rootAXFR(ns string) (zone, error) {
 		record += len(e.RR)
 		envelope++
 	}
-	took := time.Since(startTime).Round(time.Second / 1000)
+	took := time.Since(startTime).Round(time.Millisecond)
 	log.Printf("ROOT %s xfr size: %d records in %s \n", ns, record, took.String())
 
 	return root, nil
