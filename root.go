@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/miekg/dns"
 )
@@ -35,6 +36,7 @@ func rootAXFR(ns string) (zone, error) {
 	t := new(dns.Transfer)
 
 	var root zone
+	startTime := time.Now()
 
 	env, err := t.In(m, fmt.Sprintf("%s:53", ns))
 	if err != nil {
@@ -51,7 +53,8 @@ func rootAXFR(ns string) (zone, error) {
 		record += len(e.RR)
 		envelope++
 	}
-	log.Printf("ROOT %s xfr size: %d records\n", ns, record)
+	took := time.Since(startTime).Round(time.Second / 1000)
+	log.Printf("ROOT %s xfr size: %d records in %s \n", ns, record, took.String())
 
 	return root, nil
 }
