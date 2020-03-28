@@ -18,7 +18,7 @@ TLDs in the [Public Suffix List](https://publicsuffix.org/) can be attempted as 
 
 When running allxfr with a fully recursive caching resolver like BIND/named or Unbound additional zones may be found. You can enable this behavior with the `-ns` flag.
 
-An example Docker configuration for Unbound is provided in the `unbound/` directory, and can be build with `make docker-unbound` and run with `make run-unbound`.
+An example Docker configuration for Unbound is provided in the `unbound/` directory, and can be built with `make docker-unbound` and run with `make run-unbound`.
 
 ## Example
 
