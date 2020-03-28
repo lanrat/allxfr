@@ -16,7 +16,7 @@ var (
 	saveDir  = flag.String("out", "zones", "directory to save found zones in")
 	verbose  = flag.Bool("verbose", false, "enable verbose output")
 	zonefile = flag.String("zonefile", "", "use the provided zonefile instead of getting the root zonefile")
-	ns       = flag.String("ns", "", "nameserver to use for manualy querying of records not in zone file")
+	ns       = flag.String("ns", "", "nameserver to use for manually querying of records not in zone file")
 	saveAll  = flag.Bool("save-all", false, "attempt AXFR from every nameserver for a given zone and save all answers")
 	psl      = flag.Bool("psl", false, "attempt AXFR from zones listed in the public suffix list, requires -ns flag")
 	ixfr     = flag.Bool("ixfr", false, "attempt an IXFR instead of AXFR")
@@ -35,6 +35,9 @@ const (
 func main() {
 	log.SetFlags(0)
 	flag.Parse()
+	if *psl && len(*ns) == 0 {
+		log.Fatal("must pass nameserver with -ns when using -psl")
+	}
 	var err error
 	localNameserver, err = getNameserver()
 	check(err)

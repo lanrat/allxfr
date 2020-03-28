@@ -6,7 +6,7 @@
 
 This tool performs a [zone transfer (AXFR)](https://en.wikipedia.org/wiki/DNS_zone_transfer) against the root zone servers to obtain the [root zone file](https://www.iana.org/domains/root/files). And then attempts opportunistic zone transfers for every IP for every nameserver for a given zone. Additionally, each NS/A/AAAA record is also re-queried to find additional servers or IPs not included as root glue.
 
-Most zones do not allow zone transfers, however a few do. Sometimes only on a single IP for a given nameserver and not the others, and sometimes only for servers or IPs that are authorative but not incluided in the root zones. This tool will try them all and save every successful transfer.
+Most zones do not allow zone transfers, however a few do. Sometimes only on a single IP for a given nameserver and not the others, and sometimes only for servers or IPs that are authoritative but not included in the root zones. This tool will try them all and save every successful transfer.
 
 This tool works best on an IPv4/IPv6 dual stack internet connection.
 
@@ -18,14 +18,13 @@ TLDs in the [Public Suffix List](https://publicsuffix.org/) can be attempted as 
 
 When running allxfr with a fully recursive caching resolver like BIND/named or Unbound additional zones may be found. You can enable this behavior with the `-ns` flag.
 
-An example Docker configureation for Unbound is provided in the `unbound/` directory, and can be build with `make docker-unbound` and run with `make run-unbound`.
-
+An example Docker configuration for Unbound is provided in the `unbound/` directory, and can be build with `make docker-unbound` and run with `make run-unbound`.
 
 ## Example
 
 ```
 ./allxfr -dry-run
-ROOT g.root-servers.net. xfr size: 22017 records in 1.334s 
+ROOT g.root-servers.net. xfr size: 22017 records in 1.334s
 mr. ns-mr.nic.tn. (41.228.63.70) xfr size: 444 records in 337ms
 sl. ns1.neoip.com. (45.83.41.38) xfr size: 455 records in 592ms
 sy. ns1.tld.sy. (82.137.200.85) xfr size: 1594 records in 870ms
