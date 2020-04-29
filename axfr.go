@@ -153,7 +153,7 @@ func axfrToFile(zone string, ip net.IP, filename string) (int64, error) {
 					}
 				}()
 			}
-			_, err = bufWriter.WriteString(fmt.Sprintf("%s\n", r.String()))
+			_, err = bufWriter.WriteString(fmt.Sprintf("%s\n", RRString(r)))
 			if err != nil {
 				return record, err
 			}
