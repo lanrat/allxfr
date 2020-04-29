@@ -15,12 +15,6 @@ type zone struct {
 	ip map[string][]net.IP
 }
 
-/*type nsip struct {
-	domain string
-	ns     string
-	ip     net.IP
-}*/
-
 func (z *zone) AddRecord(r dns.RR) {
 	switch t := r.(type) {
 	case *dns.A:

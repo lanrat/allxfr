@@ -100,10 +100,10 @@ func queryAAAA(server, domain string) ([]net.IP, error) {
 }
 
 func queryIP(server, domain string) ([]net.IP, error) {
-	aips, err := queryA(server, domain)
+	aIPs, err := queryA(server, domain)
 	if err != nil {
-		return aips, err
+		return aIPs, err
 	}
-	aaaaips, err := queryAAAA(server, domain)
-	return append(aips, aaaaips...), err
+	aaaaIPs, err := queryAAAA(server, domain)
+	return append(aIPs, aaaaIPs...), err
 }
