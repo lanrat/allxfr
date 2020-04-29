@@ -17,16 +17,12 @@ import (
 func axfrWorker(z zone, domain string) error {
 	ips := make(map[string]bool)
 	domain = dns.Fqdn(domain)
-	filename := fmt.Sprintf("%s/%s.zone.gz", *saveDir, domain[:len(domain)-1])
 	for _, nameserver := range z.ns[domain] {
 		for _, ip := range z.ip[nameserver] {
 			ipString := string(ip.To16())
 			if !ips[ipString] {
 				ips[ipString] = true
-				if *saveAll {
-					filename = fmt.Sprintf("%s/%s_%s_%s_zone.gz", *saveDir, domain, nameserver, ip.String())
-				}
-				records, err := axfr(domain, nameserver, ip, filename)
+				records, err := axfr(domain, nameserver, ip)
 				if err != nil {
 					return err
 				}
@@ -58,13 +54,10 @@ func axfrWorker(z zone, domain string) error {
 				ipString := string(ip.To16())
 				if !ips[ipString] {
 					ips[ipString] = true
-					if *saveAll {
-						filename = fmt.Sprintf("%s/%s_%s_%s_zone.gz", *saveDir, domain, nameserver, ip.String())
-					}
 					if *verbose {
 						log.Printf("Trying AXFR: %s %s %s", domain, nameserver, ip.String())
 					}
-					records, err := axfr(domain, nameserver, ip, filename)
+					records, err := axfr(domain, nameserver, ip)
 					if err != nil {
 						return err
 					}
@@ -78,9 +71,9 @@ func axfrWorker(z zone, domain string) error {
 	return nil
 }
 
-func axfr(domain, nameserver string, ip net.IP, filename string) (int64, error) {
+func axfr(domain, nameserver string, ip net.IP) (int64, error) {
 	startTime := time.Now()
-	records, err := axfrToFile(domain, ip, filename, nameserver)
+	records, err := axfrToFile(domain, ip, nameserver)
 	if err == nil && records > 0 {
 		took := time.Since(startTime).Round(time.Millisecond)
 		log.Printf("%s %s (%s) xfr size: %d records in %s\n", domain, nameserver, ip.String(), records, took.String())
@@ -90,7 +83,7 @@ func axfr(domain, nameserver string, ip net.IP, filename string) (int64, error) 
 	return records, err
 }
 
-func axfrToFile(zone string, ip net.IP, filename, nameserver string) (int64, error) {
+func axfrToFile(zone string, ip net.IP, nameserver string) (int64, error) {
 	zone = dns.Fqdn(zone)
 
 	m := new(dns.Msg)
@@ -115,6 +108,12 @@ func axfrToFile(zone string, ip net.IP, filename, nameserver string) (int64, err
 	}
 
 	// get ready to save file
+	var filename string
+	if *saveAll {
+		filename = fmt.Sprintf("%s/%s_%s_%s_zone.gz", *saveDir, zone, nameserver, ip.String())
+	} else {
+		filename = fmt.Sprintf("%s/%s.zone.gz", *saveDir, zone[:len(zone)-1])
+	}
 	filenameTmp := fmt.Sprintf("%s.tmp", filename)
 	var bufWriter *bufio.Writer
 
