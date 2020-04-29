@@ -80,7 +80,7 @@ func axfrWorker(z zone, domain string) error {
 
 func axfr(domain, nameserver string, ip net.IP, filename string) (int64, error) {
 	startTime := time.Now()
-	records, err := axfrToFile(domain, ip, filename)
+	records, err := axfrToFile(domain, ip, filename, nameserver)
 	if err == nil && records > 0 {
 		took := time.Since(startTime).Round(time.Millisecond)
 		log.Printf("%s %s (%s) xfr size: %d records in %s\n", domain, nameserver, ip.String(), records, took.String())
@@ -90,7 +90,7 @@ func axfr(domain, nameserver string, ip net.IP, filename string) (int64, error) 
 	return records, err
 }
 
-func axfrToFile(zone string, ip net.IP, filename string) (int64, error) {
+func axfrToFile(zone string, ip net.IP, filename, nameserver string) (int64, error) {
 	zone = dns.Fqdn(zone)
 
 	m := new(dns.Msg)
@@ -118,11 +118,11 @@ func axfrToFile(zone string, ip net.IP, filename string) (int64, error) {
 	filenameTmp := fmt.Sprintf("%s.tmp", filename)
 	var bufWriter *bufio.Writer
 
-	var envelope, record int64
+	var envelope, records int64
 	for e := range env {
 		if e.Error != nil {
 			// skip on this error
-			err = fmt.Errorf("transfer envelope error from zone: %s ip: %s (rec: %d, envelope: %d): %w", zone, ip.String(), record, envelope, e.Error)
+			err = fmt.Errorf("transfer envelope error from zone: %s ip: %s (rec: %d, envelope: %d): %w", zone, ip.String(), records, envelope, e.Error)
 			if *verbose {
 				log.Print(err)
 			}
@@ -137,7 +137,7 @@ func axfrToFile(zone string, ip net.IP, filename string) (int64, error) {
 			if bufWriter == nil {
 				fileWriter, err := os.Create(filenameTmp)
 				if err != nil {
-					return record, err
+					return records, err
 				}
 				gzWriter := gzip.NewWriter(fileWriter)
 				bufWriter = bufio.NewWriter(gzWriter)
@@ -146,21 +146,46 @@ func axfrToFile(zone string, ip net.IP, filename string) (int64, error) {
 					gzWriter.Flush()
 					gzWriter.Close()
 					fileWriter.Close()
-					if record > 1 {
+					if records > 1 {
 						os.Rename(filenameTmp, filename)
 					} else {
 						os.Remove(filenameTmp)
 					}
 				}()
+				// Save metadata to zone file as comment
+				err = writeComment(bufWriter, "timestamp", time.Now().Format(time.RFC3339))
+				if err != nil {
+					return records, err
+				}
+				err = writeComment(bufWriter, "zone", zone)
+				if err != nil {
+					return records, err
+				}
+				err = writeComment(bufWriter, "nameserver", nameserver)
+				if err != nil {
+					return records, err
+				}
+				err = writeComment(bufWriter, "nameserverIP", ip.String())
+				if err != nil {
+					return records, err
+				}
+				axfrType := "AXFR"
+				if *ixfr {
+					axfrType = "IXFR"
+				}
+				err = writeComment(bufWriter, "xfr", axfrType)
+				if err != nil {
+					return records, err
+				}
 			}
 			_, err = bufWriter.WriteString(fmt.Sprintf("%s\n", RRString(r)))
 			if err != nil {
-				return record, err
+				return records, err
 			}
 		}
-		record += int64(len(e.RR))
+		records += int64(len(e.RR))
 		envelope++
 	}
 
-	return record, err
+	return records, err
 }
