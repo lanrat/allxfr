@@ -141,6 +141,11 @@ func axfrToFile(zone string, ip net.IP, nameserver string) (int64, error) {
 				gzWriter := gzip.NewWriter(fileWriter)
 				bufWriter = bufio.NewWriter(gzWriter)
 				defer func() {
+					if records > 1 {
+						// save record count comment at end of zone file
+						writeComment(bufWriter, "records", fmt.Sprintf("%d", records))
+						writeComment(bufWriter, "envelopes", fmt.Sprintf("%d", envelope))
+					}
 					bufWriter.Flush()
 					gzWriter.Flush()
 					gzWriter.Close()
