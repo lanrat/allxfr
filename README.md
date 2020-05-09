@@ -58,13 +58,15 @@ Usage of ./allxfr:
   -ixfr
         attempt an IXFR instead of AXFR
   -ns string
-        nameserver to use for manualy querying of records not in zone file
+        nameserver to use for manually querying of records not in zone file
   -out string
         directory to save found zones in (default "zones")
   -parallel uint
         number of parallel zone transfers to perform (default 10)
   -psl
         attempt AXFR from zones listed in the public suffix list, requires -ns flag
+  -retry int
+        number of times to retry failed operations (default 3)
   -save-all
         attempt AXFR from every nameserver for a given zone and save all answers
   -verbose

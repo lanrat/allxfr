@@ -21,6 +21,7 @@ var (
 	psl      = flag.Bool("psl", false, "attempt AXFR from zones listed in the public suffix list, requires -ns flag")
 	ixfr     = flag.Bool("ixfr", false, "attempt an IXFR instead of AXFR")
 	dryRun   = flag.Bool("dry-run", false, "only test if xfr is allowed by retrieving one envelope")
+	retry    = flag.Int("retry", 3, "number of times to retry failed operations")
 )
 
 var (
@@ -37,6 +38,12 @@ func main() {
 	flag.Parse()
 	if *psl && len(*ns) == 0 {
 		log.Fatal("must pass nameserver with -ns when using -psl")
+	}
+	if *retry < 1 {
+		log.Fatal("retry must be positive")
+	}
+	if flag.NArg() > 0 {
+		log.Fatalf("unexpected arguments %v", flag.Args())
 	}
 	var err error
 	localNameserver, err = getNameserver()

@@ -17,52 +17,85 @@ import (
 func axfrWorker(z zone, domain string) error {
 	ips := make(map[string]bool)
 	domain = dns.Fqdn(domain)
+	var err error
+	var records int64
 	for _, nameserver := range z.ns[domain] {
 		for _, ip := range z.ip[nameserver] {
 			ipString := string(ip.To16())
 			if !ips[ipString] {
 				ips[ipString] = true
-				records, err := axfr(domain, nameserver, ip)
-				if err != nil {
-					return err
+				for try := 0; try < *retry; try++ {
+					records, err = axfr(domain, nameserver, ip)
+					if err != nil {
+						if *verbose {
+							log.Println(err)
+						}
+					} else {
+						if records > 0 {
+							break
+						}
+					}
 				}
 				if !*saveAll && records > 0 {
 					return nil
+				}
+				if err != nil {
+					return err
 				}
 			}
 		}
 	}
 	if len(*ns) > 0 {
 		// query NS and run axfr on missing IPs
-		qNameservers, err := queryNS(localNameserver, domain)
-		if err != nil {
-			if *verbose {
-				log.Println(err)
-			}
-			return nil
-		}
-		for _, nameserver := range qNameservers {
-			qIPs, err := queryIP(localNameserver, nameserver)
+		var qNameservers []string
+		for try := 0; try < *retry; try++ {
+			qNameservers, err = queryNS(localNameserver, domain)
 			if err != nil {
 				if *verbose {
 					log.Println(err)
 				}
-				continue
+			} else {
+				break
+			}
+		}
+
+		for _, nameserver := range qNameservers {
+			var qIPs []net.IP
+			for try := 0; try < *retry; try++ {
+				qIPs, err = queryIP(localNameserver, nameserver)
+				if err != nil {
+					if *verbose {
+						log.Println(err)
+					}
+				} else {
+					break
+				}
 			}
 
 			for _, ip := range qIPs {
 				ipString := string(ip.To16())
 				if !ips[ipString] {
 					ips[ipString] = true
-					if *verbose {
-						log.Printf("Trying AXFR: %s %s %s", domain, nameserver, ip.String())
-					}
-					records, err := axfr(domain, nameserver, ip)
-					if err != nil {
-						return err
+					for try := 0; try < *retry; try++ {
+						if *verbose {
+							log.Printf("Trying AXFR: %s %s %s", domain, nameserver, ip.String())
+						}
+						records, err = axfr(domain, nameserver, ip)
+						if err != nil {
+							if *verbose {
+								log.Println(err)
+							}
+						} else {
+							if records > 0 {
+								break
+							}
+						}
 					}
 					if !*saveAll && records > 0 {
 						return nil
+					}
+					if err != nil {
+						return err
 					}
 				}
 			}
@@ -78,7 +111,6 @@ func axfr(domain, nameserver string, ip net.IP) (int64, error) {
 		took := time.Since(startTime).Round(time.Millisecond)
 		log.Printf("%s %s (%s) xfr size: %d records in %s\n", domain, nameserver, ip.String(), records, took.String())
 		atomic.AddUint32(&totalXFR, 1)
-
 	}
 	return records, err
 }
