@@ -23,7 +23,7 @@ func getRootServers() ([]string, error) {
 		}
 	}
 	if len(out) == 0 {
-		return out, fmt.Errorf("Unable to find Root Server")
+		return out, fmt.Errorf("unable to find root server")
 
 	}
 	return out, nil

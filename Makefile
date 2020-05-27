@@ -20,6 +20,10 @@ docker: Dockerfile
 $(BIN): $(SOURCES) $(MODULE_SOURCES) go.mod go.sum
 	$(CC) -o $@ $(SOURCES)
 
+check:
+	golangci-lint run
+	staticcheck -unused.whole-program -checks all ./...
+
 clean:
 	rm $(BIN)
 

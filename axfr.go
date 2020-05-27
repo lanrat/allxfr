@@ -172,20 +172,42 @@ func axfrToFile(zone string, ip net.IP, nameserver string) (int64, error) {
 				}
 				gzWriter := gzip.NewWriter(fileWriter)
 				bufWriter = bufio.NewWriter(gzWriter)
+				// setup function to finish/close/safe the files when done
 				defer func() {
 					if records > 1 {
 						// save record count comment at end of zone file
-						writeComment(bufWriter, "records", fmt.Sprintf("%d", records))
-						writeComment(bufWriter, "envelopes", fmt.Sprintf("%d", envelope))
+						err := writeComment(bufWriter, "records", fmt.Sprintf("%d", records))
+						if err != nil {
+							panic(err)
+						}
+						err = writeComment(bufWriter, "envelopes", fmt.Sprintf("%d", envelope))
+						if err != nil {
+							panic(err)
+						}
 					}
-					bufWriter.Flush()
-					gzWriter.Flush()
-					gzWriter.Close()
-					fileWriter.Close()
+					err = bufWriter.Flush()
+					if err != nil {
+						panic(err)
+					}
+					err = gzWriter.Flush()
+					if err != nil {
+						panic(err)
+					}
+					err = gzWriter.Close()
+					if err != nil {
+						panic(err)
+					}
+					err = fileWriter.Close()
+					if err != nil {
+						panic(err)
+					}
 					if records > 1 {
-						os.Rename(filenameTmp, filename)
+						err = os.Rename(filenameTmp, filename)
 					} else {
-						os.Remove(filenameTmp)
+						err = os.Remove(filenameTmp)
+					}
+					if err != nil {
+						panic(err)
 					}
 				}()
 				// Save metadata to zone file as comment
