@@ -148,6 +148,9 @@ func axfrToFile(zone string, ip net.IP, nameserver string) (int64, error) {
 	}
 	if !*overwrite {
 		if _, err := os.Stat(filename); err != nil && !os.IsNotExist(err) {
+			if *verbose {
+				log.Printf("File %q exists, skipping", filename)
+			}
 			return 0, nil
 		}
 	}
