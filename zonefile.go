@@ -36,6 +36,6 @@ func parseZoneFile(filename string) (zone, error) {
 	if err := zp.Err(); err != nil {
 		return z, err
 	}
-	log.Printf("zonefile parsing done")
+	//log.Printf("zonefile parsing done")
 	return z, nil
 }

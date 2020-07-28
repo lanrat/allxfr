@@ -23,7 +23,7 @@ func init() {
 func queryNS(server, domain string) ([]string, error) {
 	domain = dns.Fqdn(domain)
 	if *verbose {
-		log.Printf("DNS Query: @%s NS %s", server, domain)
+		log.Printf("dns query: @%s NS %s", server, domain)
 	}
 	m := new(dns.Msg)
 	m.SetQuestion(domain, dns.TypeNS)
@@ -50,7 +50,7 @@ func queryNS(server, domain string) ([]string, error) {
 func queryA(server, domain string) ([]net.IP, error) {
 	domain = dns.Fqdn(domain)
 	if *verbose {
-		log.Printf("DNS Query: @%s A %s", server, domain)
+		log.Printf("dns query: @%s A %s", server, domain)
 	}
 	m := new(dns.Msg)
 	m.SetQuestion(domain, dns.TypeA)
@@ -76,7 +76,7 @@ func queryA(server, domain string) ([]net.IP, error) {
 func queryAAAA(server, domain string) ([]net.IP, error) {
 	domain = dns.Fqdn(domain)
 	if *verbose {
-		log.Printf("DNS Query: @%s AAAA %s", server, domain)
+		log.Printf("dns query: @%s AAAA %s", server, domain)
 	}
 	m := new(dns.Msg)
 	m.SetQuestion(domain, dns.TypeAAAA)
