@@ -28,7 +28,7 @@ func axfrWorker(z zone, domain string) error {
 					records, err = axfr(domain, nameserver, ip)
 					if err != nil {
 						if *verbose {
-							log.Println(err)
+							log.Printf("[%s] %s", z, err)
 						}
 					} else {
 						if records > 0 {
@@ -52,7 +52,7 @@ func axfrWorker(z zone, domain string) error {
 			qNameservers, err = queryNS(localNameserver, domain)
 			if err != nil {
 				if *verbose {
-					log.Println(err)
+					log.Printf("[%s] %s", z, err)
 				}
 			} else {
 				break
@@ -65,7 +65,7 @@ func axfrWorker(z zone, domain string) error {
 				qIPs, err = queryIP(localNameserver, nameserver)
 				if err != nil {
 					if *verbose {
-						log.Println(err)
+						log.Printf("[%s] %s", z, err)
 					}
 				} else {
 					break
@@ -78,12 +78,12 @@ func axfrWorker(z zone, domain string) error {
 					ips[ipString] = true
 					for try := 0; try < *retry; try++ {
 						if *verbose {
-							log.Printf("Trying AXFR: %s %s %s", domain, nameserver, ip.String())
+							log.Printf("[%s] trying AXFR: %s %s %s", z, domain, nameserver, ip.String())
 						}
 						records, err = axfr(domain, nameserver, ip)
 						if err != nil {
 							if *verbose {
-								log.Println(err)
+								log.Printf("[%s] %s", z, err)
 							}
 						} else {
 							if records > 0 {
@@ -134,7 +134,7 @@ func axfrToFile(zone string, ip net.IP, nameserver string) (int64, error) {
 		// skip on this error
 		err = fmt.Errorf("transfer error from zone: %s ip: %s: %w", zone, ip.String(), err)
 		if *verbose {
-			log.Print(err)
+			log.Printf("[%s] %s", zone, err)
 		}
 		return 0, nil
 	}
@@ -149,7 +149,7 @@ func axfrToFile(zone string, ip net.IP, nameserver string) (int64, error) {
 	if !*overwrite {
 		if _, err := os.Stat(filename); err != nil && !os.IsNotExist(err) {
 			if *verbose {
-				log.Printf("File %q exists, skipping", filename)
+				log.Printf("[%s] file %q exists, skipping", zone, filename)
 			}
 			return 0, nil
 		}
@@ -164,7 +164,7 @@ func axfrToFile(zone string, ip net.IP, nameserver string) (int64, error) {
 			// skip on this error
 			err = fmt.Errorf("transfer envelope error from zone: %s ip: %s (rec: %d, envelope: %d): %w", zone, ip.String(), records, envelope, e.Error)
 			if *verbose {
-				log.Print(err)
+				log.Printf("[%s] %s", zone, err)
 			}
 			err = nil
 			break

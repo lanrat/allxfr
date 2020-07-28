@@ -50,7 +50,7 @@ func main() {
 	localNameserver, err = getNameserver()
 	check(err)
 	if *verbose {
-		log.Printf("Using initial nameserver %s", localNameserver)
+		log.Printf("using initial nameserver %s", localNameserver)
 	}
 
 	start := time.Now()
@@ -62,7 +62,7 @@ func main() {
 		// not all the root nameservers allow AXFR, try them until we find one that does
 		for _, ns := range rootNameservers {
 			if *verbose {
-				log.Printf("Trying root nameserver %s", ns)
+				log.Printf("trying root nameserver %s", ns)
 			}
 			z, err = rootAXFR(ns)
 			if err == nil {
