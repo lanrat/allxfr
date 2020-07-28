@@ -22,7 +22,7 @@ An example Docker configuration for Unbound is provided in the `unbound/` direct
 
 ## Example
 
-```
+```console
 ./allxfr -dry-run
 ROOT g.root-servers.net. xfr size: 22017 records in 1.334s
 mr. ns-mr.nic.tn. (41.228.63.70) xfr size: 444 records in 337ms
@@ -51,7 +51,7 @@ sv. cir.red.sv. (168.243.254.1) xfr size: 1514 records in 883ms
 
 ## Usage
 
-```
+```console
 Usage of ./allxfr:
   -dry-run
         only test if xfr is allowed by retrieving one envelope
@@ -61,6 +61,8 @@ Usage of ./allxfr:
         nameserver to use for manually querying of records not in zone file
   -out string
         directory to save found zones in (default "zones")
+  -overwrite
+        if zone already exists on disk, overwrite it with newer data
   -parallel uint
         number of parallel zone transfers to perform (default 10)
   -psl
@@ -77,6 +79,6 @@ Usage of ./allxfr:
 
 ## Building
 
-```
+```console
 go build
 ```

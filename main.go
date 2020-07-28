@@ -12,16 +12,17 @@ import (
 )
 
 var (
-	parallel = flag.Uint("parallel", 10, "number of parallel zone transfers to perform")
-	saveDir  = flag.String("out", "zones", "directory to save found zones in")
-	verbose  = flag.Bool("verbose", false, "enable verbose output")
-	zonefile = flag.String("zonefile", "", "use the provided zonefile instead of getting the root zonefile")
-	ns       = flag.String("ns", "", "nameserver to use for manually querying of records not in zone file")
-	saveAll  = flag.Bool("save-all", false, "attempt AXFR from every nameserver for a given zone and save all answers")
-	psl      = flag.Bool("psl", false, "attempt AXFR from zones listed in the public suffix list, requires -ns flag")
-	ixfr     = flag.Bool("ixfr", false, "attempt an IXFR instead of AXFR")
-	dryRun   = flag.Bool("dry-run", false, "only test if xfr is allowed by retrieving one envelope")
-	retry    = flag.Int("retry", 3, "number of times to retry failed operations")
+	parallel  = flag.Uint("parallel", 10, "number of parallel zone transfers to perform")
+	saveDir   = flag.String("out", "zones", "directory to save found zones in")
+	verbose   = flag.Bool("verbose", false, "enable verbose output")
+	zonefile  = flag.String("zonefile", "", "use the provided zonefile instead of getting the root zonefile")
+	ns        = flag.String("ns", "", "nameserver to use for manually querying of records not in zone file")
+	saveAll   = flag.Bool("save-all", false, "attempt AXFR from every nameserver for a given zone and save all answers")
+	psl       = flag.Bool("psl", false, "attempt AXFR from zones listed in the public suffix list, requires -ns flag")
+	ixfr      = flag.Bool("ixfr", false, "attempt an IXFR instead of AXFR")
+	dryRun    = flag.Bool("dry-run", false, "only test if xfr is allowed by retrieving one envelope")
+	retry     = flag.Int("retry", 3, "number of times to retry failed operations")
+	overwrite = flag.Bool("overwrite", false, "if zone already exists on disk, overwrite it with newer data")
 )
 
 var (

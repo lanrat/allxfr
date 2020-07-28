@@ -146,6 +146,12 @@ func axfrToFile(zone string, ip net.IP, nameserver string) (int64, error) {
 	} else {
 		filename = fmt.Sprintf("%s/%s.zone.gz", *saveDir, zone[:len(zone)-1])
 	}
+	if !*overwrite {
+		if _, err := os.Stat(filename); err != nil && !os.IsNotExist(err) {
+			return 0, nil
+		}
+	}
+
 	filenameTmp := fmt.Sprintf("%s.tmp", filename)
 	var bufWriter *bufio.Writer
 
