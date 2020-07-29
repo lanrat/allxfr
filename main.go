@@ -35,7 +35,7 @@ const (
 )
 
 func main() {
-	log.SetFlags(0)
+	//log.SetFlags(0)
 	flag.Parse()
 	if *psl && len(*ns) == 0 {
 		log.Fatal("must pass nameserver with -ns when using -psl")
