@@ -28,7 +28,7 @@ func axfrWorker(z zone, domain string) error {
 					records, err = axfr(domain, nameserver, ip)
 					if err != nil {
 						if *verbose {
-							log.Printf("[%s] %s", z, err)
+							log.Printf("[%s] %s", domain, err)
 						}
 					} else {
 						if records > 0 {
@@ -52,7 +52,7 @@ func axfrWorker(z zone, domain string) error {
 			qNameservers, err = queryNS(localNameserver, domain)
 			if err != nil {
 				if *verbose {
-					log.Printf("[%s] %s", z, err)
+					log.Printf("[%s] %s", domain, err)
 				}
 			} else {
 				break
@@ -65,7 +65,7 @@ func axfrWorker(z zone, domain string) error {
 				qIPs, err = queryIP(localNameserver, nameserver)
 				if err != nil {
 					if *verbose {
-						log.Printf("[%s] %s", z, err)
+						log.Printf("[%s] %s", domain, err)
 					}
 				} else {
 					break
@@ -78,12 +78,12 @@ func axfrWorker(z zone, domain string) error {
 					ips[ipString] = true
 					for try := 0; try < *retry; try++ {
 						if *verbose {
-							log.Printf("[%s] trying AXFR: %s %s %s", z, domain, nameserver, ip.String())
+							log.Printf("[%s] trying AXFR: %s %s", domain, nameserver, ip.String())
 						}
 						records, err = axfr(domain, nameserver, ip)
 						if err != nil {
 							if *verbose {
-								log.Printf("[%s] %s", z, err)
+								log.Printf("[%s] %s", domain, err)
 							}
 						} else {
 							if records > 0 {

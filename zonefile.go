@@ -27,7 +27,7 @@ func parseZoneFile(filename string) (zone, error) {
 		fileReader = gz
 		defer gz.Close()
 	}
-	log.Printf("parsing zonefile: %s\n", filename)
+	log.Printf("parsing zonefile: %q\n", filename)
 	zp := dns.NewZoneParser(fileReader, "", "")
 	for rr, ok := zp.Next(); ok; rr, ok = zp.Next() {
 		z.AddRecord(rr)
