@@ -31,7 +31,7 @@ var (
 )
 
 const (
-	globalTimeout = 10 * time.Second
+	globalTimeout = 15 * time.Second
 )
 
 func main() {
