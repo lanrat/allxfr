@@ -153,6 +153,7 @@ func axfrToFile(zone string, ip net.IP, nameserver string) (int64, error) {
 		filename = path.Join(*saveDir, fmt.Sprintf("%s.zone.gz", zone[:len(zone)-1]))
 	}
 	if !*overwrite {
+		// this ic checked for every NS for every zone, not a problem, but a little redundant.
 		if _, err := os.Stat(filename); err == nil || !os.IsNotExist(err) {
 			if *verbose {
 				log.Printf("[%s] file %q exists, skipping", zone, filename)
