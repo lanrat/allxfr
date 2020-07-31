@@ -7,6 +7,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"path"
 	"sync/atomic"
 	"time"
 
@@ -31,7 +32,7 @@ func axfrWorker(z zone, domain string) error {
 							log.Printf("[%s] %s", domain, err)
 						}
 					} else {
-						if records > 0 {
+						if records != 0 {
 							break
 						}
 					}
@@ -89,7 +90,7 @@ func axfrWorker(z zone, domain string) error {
 								log.Printf("[%s] %s", domain, err)
 							}
 						} else {
-							if records > 0 {
+							if records != 0 {
 								break
 							}
 						}
@@ -119,6 +120,7 @@ func axfr(domain, nameserver string, ip net.IP) (int64, error) {
 	return records, err
 }
 
+// returns -1 if zone already exists and we are not overwriting
 func axfrToFile(zone string, ip net.IP, nameserver string) (int64, error) {
 	zone = dns.Fqdn(zone)
 
@@ -146,16 +148,16 @@ func axfrToFile(zone string, ip net.IP, nameserver string) (int64, error) {
 	// get ready to save file
 	var filename string
 	if *saveAll {
-		filename = fmt.Sprintf("%s/%s_%s_%s_zone.gz", *saveDir, zone, nameserver, ip.String())
+		filename = path.Join(*saveDir, fmt.Sprintf("%s_%s_%s_zone.gz", zone, nameserver, ip.String()))
 	} else {
-		filename = fmt.Sprintf("%s/%s.zone.gz", *saveDir, zone[:len(zone)-1])
+		filename = path.Join(*saveDir, fmt.Sprintf("%s.zone.gz", zone[:len(zone)-1]))
 	}
 	if !*overwrite {
 		if _, err := os.Stat(filename); err == nil || !os.IsNotExist(err) {
 			if *verbose {
 				log.Printf("[%s] file %q exists, skipping", zone, filename)
 			}
-			return 0, nil
+			return -1, nil
 		}
 	}
 
