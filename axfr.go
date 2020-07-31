@@ -35,6 +35,7 @@ func axfrWorker(z zone, domain string) error {
 							break
 						}
 					}
+					time.Sleep(1 * time.Second)
 				}
 				if !*saveAll && records > 0 {
 					return nil
@@ -57,6 +58,7 @@ func axfrWorker(z zone, domain string) error {
 			} else {
 				break
 			}
+			time.Sleep(1 * time.Second)
 		}
 
 		for _, nameserver := range qNameservers {
@@ -70,6 +72,7 @@ func axfrWorker(z zone, domain string) error {
 				} else {
 					break
 				}
+				time.Sleep(1 * time.Second)
 			}
 
 			for _, ip := range qIPs {
@@ -90,6 +93,7 @@ func axfrWorker(z zone, domain string) error {
 								break
 							}
 						}
+						time.Sleep(1 * time.Second)
 					}
 					if !*saveAll && records > 0 {
 						return nil
