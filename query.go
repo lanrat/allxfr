@@ -37,7 +37,7 @@ func queryNS(server, domain string) ([]string, error) {
 	for i := range in.Answer {
 		if t, ok := in.Answer[i].(*dns.NS); ok {
 			if *verbose {
-				log.Printf("\t%s\n", t.Ns)
+				log.Printf("dns answer NS @%s\t%s:\t%s\n", server, domain, t.Ns)
 			}
 			t.Ns = strings.ToLower(t.Ns)
 			out = append(out, t.Ns)
@@ -64,7 +64,7 @@ func queryA(server, domain string) ([]net.IP, error) {
 	for i := range in.Answer {
 		if t, ok := in.Answer[i].(*dns.A); ok {
 			if *verbose {
-				log.Printf("\t%s\n", t.A.String())
+				log.Printf("dns answer A @%s\t%s:\t%s\n", server, domain, t.A.String())
 			}
 			out = append(out, t.A)
 		}
@@ -90,7 +90,7 @@ func queryAAAA(server, domain string) ([]net.IP, error) {
 	for i := range in.Answer {
 		if t, ok := in.Answer[i].(*dns.AAAA); ok {
 			if *verbose {
-				log.Printf("\t%s\n", t.AAAA.String())
+				log.Printf("dns answer AAAA @%s\t%s:\t%s\n", server, domain, t.AAAA.String())
 			}
 			out = append(out, t.AAAA)
 		}
