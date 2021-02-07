@@ -1,8 +1,6 @@
 package main
 
 import (
-	"allxfr/psl"
-	"allxfr/zone"
 	"flag"
 	"fmt"
 	"log"
@@ -10,6 +8,10 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/lanrat/allxfr/zone"
+
+	"github.com/lanrat/allxfr/psl"
 
 	"github.com/miekg/dns"
 	"golang.org/x/sync/errgroup"

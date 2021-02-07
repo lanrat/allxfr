@@ -1,8 +1,6 @@
 package main
 
 import (
-	"allxfr/save"
-	"allxfr/zone"
 	"fmt"
 	"log"
 	"net"
@@ -10,6 +8,9 @@ import (
 	"path"
 	"sync/atomic"
 	"time"
+
+	"github.com/lanrat/allxfr/save"
+	"github.com/lanrat/allxfr/zone"
 
 	"github.com/miekg/dns"
 )
