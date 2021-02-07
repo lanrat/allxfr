@@ -1,10 +1,14 @@
 package main
 
 import (
+	"allxfr/psl"
+	"allxfr/zone"
 	"flag"
+	"fmt"
 	"log"
 	"net"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/miekg/dns"
@@ -18,7 +22,7 @@ var (
 	zonefile  = flag.String("zonefile", "", "use the provided zonefile instead of getting the root zonefile")
 	ns        = flag.String("ns", "", "nameserver to use for manually querying of records not in zone file")
 	saveAll   = flag.Bool("save-all", false, "attempt AXFR from every nameserver for a given zone and save all answers")
-	psl       = flag.Bool("psl", false, "attempt AXFR from zones listed in the public suffix list, requires -ns flag")
+	usePSL    = flag.Bool("psl", false, "attempt AXFR from zones listed in the public suffix list, requires -ns flag")
 	ixfr      = flag.Bool("ixfr", false, "attempt an IXFR instead of AXFR")
 	dryRun    = flag.Bool("dry-run", false, "only test if xfr is allowed by retrieving one envelope")
 	retry     = flag.Int("retry", 3, "number of times to retry failed operations")
@@ -37,7 +41,7 @@ const (
 func main() {
 	//log.SetFlags(0)
 	flag.Parse()
-	if *psl && len(*ns) == 0 {
+	if *usePSL && len(*ns) == 0 {
 		log.Fatal("must pass nameserver with -ns when using -psl")
 	}
 	if *retry < 1 {
@@ -49,29 +53,25 @@ func main() {
 	var err error
 	localNameserver, err = getNameserver()
 	check(err)
-	if *verbose {
-		log.Printf("using initial nameserver %s", localNameserver)
-	}
+	v("using initial nameserver %s", localNameserver)
 
 	start := time.Now()
-	var z zone
+	var z zone.Zone
 	if len(*zonefile) == 0 {
-		rootNameservers, err := getRootServers()
+		rootNameservers, err := zone.GetRootServers(localNameserver)
 		check(err)
 		// get zone file from root AXFR
 		// not all the root nameservers allow AXFR, try them until we find one that does
 		for _, ns := range rootNameservers {
-			if *verbose {
-				log.Printf("trying root nameserver %s", ns)
-			}
-			z, err = rootAXFR(ns)
+			v("trying root nameserver %s", ns)
+			z, err = zone.RootAXFR(ns)
 			if err == nil {
 				break
 			}
 		}
 	} else {
 		// zone file is provided
-		z, err = parseZoneFile(*zonefile)
+		z, err = zone.ParseZoneFile(*zonefile)
 		check(err)
 	}
 
@@ -79,15 +79,13 @@ func main() {
 		log.Fatal("Got empty zone")
 	}
 
-	if *psl {
-		pslDomains, err := getPSLDomsins()
+	if *usePSL {
+		pslDomains, err := psl.GetDomains()
 		check(err)
 		for _, domain := range pslDomains {
 			z.AddNS(domain, "")
 		}
-		if *verbose {
-			log.Printf("added %d domains from PSL\n", len(pslDomains))
-		}
+		v("added %d domains from PSL\n", len(pslDomains))
 	}
 
 	// create outpout dir if does not exist
@@ -113,13 +111,11 @@ func main() {
 	err = g.Wait()
 	check(err)
 	took := time.Since(start).Round(time.Millisecond)
-	log.Printf("%d / %d transferred in %s\n", totalXFR, len(z.ns), took.String())
-	if *verbose {
-		log.Printf("exiting normally\n")
-	}
+	log.Printf("%d / %d transferred in %s\n", totalXFR, len(z.NS), took.String())
+	v("exiting normally\n")
 }
 
-func worker(z zone, c chan string) error {
+func worker(z zone.Zone, c chan string) error {
 	for {
 		domain, more := <-c
 		if !more {
@@ -135,6 +131,14 @@ func worker(z zone, c chan string) error {
 func check(err error) {
 	if err != nil {
 		log.Fatal(err)
+	}
+}
+
+func v(format string, v ...interface{}) {
+	if *verbose {
+		line := fmt.Sprintf(format, v...)
+		lines := strings.ReplaceAll(line, "\n", "\n\t")
+		log.Print(lines)
 	}
 }
 

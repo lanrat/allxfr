@@ -1,4 +1,4 @@
-package main
+package zone
 
 import (
 	"compress/gzip"
@@ -10,8 +10,9 @@ import (
 	"github.com/miekg/dns"
 )
 
-func parseZoneFile(filename string) (zone, error) {
-	var z zone
+// ParseZoneFile parses the provided zonefile into a Zone
+func ParseZoneFile(filename string) (Zone, error) {
+	var z Zone
 	var fileReader io.Reader
 	file, err := os.Open(filename)
 	fileReader = file

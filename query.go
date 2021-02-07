@@ -1,7 +1,6 @@
 package main
 
 import (
-	"log"
 	"net"
 	"strings"
 
@@ -22,9 +21,7 @@ func init() {
 
 func queryNS(server, domain string) ([]string, error) {
 	domain = dns.Fqdn(domain)
-	if *verbose {
-		log.Printf("dns query: @%s NS %s", server, domain)
-	}
+	v("dns query: @%s NS %s", server, domain)
 	m := new(dns.Msg)
 	m.SetQuestion(domain, dns.TypeNS)
 
@@ -36,9 +33,7 @@ func queryNS(server, domain string) ([]string, error) {
 	out := make([]string, 0, 2)
 	for i := range in.Answer {
 		if t, ok := in.Answer[i].(*dns.NS); ok {
-			if *verbose {
-				log.Printf("dns answer NS @%s\t%s:\t%s\n", server, domain, t.Ns)
-			}
+			v("dns answer NS @%s\t%s:\t%s\n", server, domain, t.Ns)
 			t.Ns = strings.ToLower(t.Ns)
 			out = append(out, t.Ns)
 		}
@@ -49,9 +44,7 @@ func queryNS(server, domain string) ([]string, error) {
 
 func queryA(server, domain string) ([]net.IP, error) {
 	domain = dns.Fqdn(domain)
-	if *verbose {
-		log.Printf("dns query: @%s A %s", server, domain)
-	}
+	v("dns query: @%s A %s", server, domain)
 	m := new(dns.Msg)
 	m.SetQuestion(domain, dns.TypeA)
 
@@ -63,9 +56,7 @@ func queryA(server, domain string) ([]net.IP, error) {
 	out := make([]net.IP, 0, 1)
 	for i := range in.Answer {
 		if t, ok := in.Answer[i].(*dns.A); ok {
-			if *verbose {
-				log.Printf("dns answer A @%s\t%s:\t%s\n", server, domain, t.A.String())
-			}
+			v("dns answer A @%s\t%s:\t%s\n", server, domain, t.A.String())
 			out = append(out, t.A)
 		}
 	}
@@ -75,9 +66,7 @@ func queryA(server, domain string) ([]net.IP, error) {
 
 func queryAAAA(server, domain string) ([]net.IP, error) {
 	domain = dns.Fqdn(domain)
-	if *verbose {
-		log.Printf("dns query: @%s AAAA %s", server, domain)
-	}
+	v("dns query: @%s AAAA %s", server, domain)
 	m := new(dns.Msg)
 	m.SetQuestion(domain, dns.TypeAAAA)
 
@@ -89,9 +78,7 @@ func queryAAAA(server, domain string) ([]net.IP, error) {
 	out := make([]net.IP, 0, 1)
 	for i := range in.Answer {
 		if t, ok := in.Answer[i].(*dns.AAAA); ok {
-			if *verbose {
-				log.Printf("dns answer AAAA @%s\t%s:\t%s\n", server, domain, t.AAAA.String())
-			}
+			v("dns answer AAAA @%s\t%s:\t%s\n", server, domain, t.AAAA.String())
 			out = append(out, t.AAAA)
 		}
 	}

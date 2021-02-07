@@ -2,6 +2,7 @@ package main
 
 import (
 	"allxfr/save"
+	"allxfr/zone"
 	"fmt"
 	"log"
 	"net"
@@ -14,22 +15,20 @@ import (
 )
 
 // axfrWorker iterate through all possabilities and queries attempting an AXFR
-func axfrWorker(z zone, domain string) error {
+func axfrWorker(z zone.Zone, domain string) error {
 	ips := make(map[string]bool)
 	domain = dns.Fqdn(domain)
 	var err error
 	var records int64
-	for _, nameserver := range z.ns[domain] {
-		for _, ip := range z.ip[nameserver] {
+	for _, nameserver := range z.NS[domain] {
+		for _, ip := range z.IP[nameserver] {
 			ipString := string(ip.To16())
 			if !ips[ipString] {
 				ips[ipString] = true
 				for try := 0; try < *retry; try++ {
 					records, err = axfr(domain, nameserver, ip)
 					if err != nil {
-						if *verbose {
-							log.Printf("[%s] %s", domain, err)
-						}
+						v("[%s] %s", domain, err)
 					} else {
 						if records != 0 {
 							break
@@ -52,9 +51,7 @@ func axfrWorker(z zone, domain string) error {
 		for try := 0; try < *retry; try++ {
 			qNameservers, err = queryNS(localNameserver, domain)
 			if err != nil {
-				if *verbose {
-					log.Printf("[%s] %s", domain, err)
-				}
+				v("[%s] %s", domain, err)
 			} else {
 				break
 			}
@@ -66,9 +63,7 @@ func axfrWorker(z zone, domain string) error {
 			for try := 0; try < *retry; try++ {
 				qIPs, err = queryIP(localNameserver, nameserver)
 				if err != nil {
-					if *verbose {
-						log.Printf("[%s] %s", domain, err)
-					}
+					v("[%s] %s", domain, err)
 				} else {
 					break
 				}
@@ -80,14 +75,10 @@ func axfrWorker(z zone, domain string) error {
 				if !ips[ipString] {
 					ips[ipString] = true
 					for try := 0; try < *retry; try++ {
-						if *verbose {
-							log.Printf("[%s] trying AXFR: %s %s", domain, nameserver, ip.String())
-						}
+						v("[%s] trying AXFR: %s %s", domain, nameserver, ip.String())
 						records, err = axfr(domain, nameserver, ip)
 						if err != nil {
-							if *verbose {
-								log.Printf("[%s] %s", domain, err)
-							}
+							v("[%s] %s", domain, err)
 						} else {
 							if records != 0 {
 								break
@@ -138,9 +129,7 @@ func axfrToFile(zone string, ip net.IP, nameserver string) (int64, error) {
 	if err != nil {
 		// skip on this error
 		err = fmt.Errorf("transfer error from zone: %s ip: %s: %w", zone, ip.String(), err)
-		if *verbose {
-			log.Printf("[%s] %s", zone, err)
-		}
+		v("[%s] %s", zone, err)
 		return 0, nil
 	}
 
@@ -153,17 +142,13 @@ func axfrToFile(zone string, ip net.IP, nameserver string) (int64, error) {
 	}
 	if !*overwrite {
 		if _, err := os.Stat(filename); err == nil || !os.IsNotExist(err) {
-			if *verbose {
-				log.Printf("[%s] file %q exists, skipping", zone, filename)
-			}
+			v("[%s] file %q exists, skipping", zone, filename)
 			return -1, nil
 		}
 	}
 
 	var envelope int64
-	if *verbose {
-		log.Printf("saving zone %q to file %s", zone, filename)
-	}
+	v("saving zone %q to file %s", zone, filename)
 	zonefile := save.New(zone, filename)
 	defer func() {
 		err = zonefile.WriteComment("envelopes", fmt.Sprintf("%d", envelope))
@@ -197,9 +182,7 @@ func axfrToFile(zone string, ip net.IP, nameserver string) (int64, error) {
 		if e.Error != nil {
 			// skip on this error
 			err = fmt.Errorf("transfer envelope error from zone: %s ip: %s (rec: %d, envelope: %d): %w", zone, ip.String(), zonefile.Records(), envelope, e.Error)
-			if *verbose {
-				log.Printf("[%s] %s", zone, err)
-			}
+			v("[%s] %s", zone, err)
 			err = nil
 			break
 		}

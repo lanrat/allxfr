@@ -1,4 +1,4 @@
-package main
+package zone
 
 import (
 	"fmt"
@@ -8,12 +8,13 @@ import (
 	"github.com/miekg/dns"
 )
 
-func getRootServers() ([]string, error) {
+// GetRootServers returns the DNS root servers
+func GetRootServers(nameserver string) ([]string, error) {
 	out := make([]string, 0, 4)
 	// get root servers
 	m := new(dns.Msg)
 	m.SetQuestion(".", dns.TypeNS)
-	in, err := dns.Exchange(m, localNameserver)
+	in, err := dns.Exchange(m, nameserver)
 	if err != nil {
 		return out, err
 	}
@@ -29,13 +30,14 @@ func getRootServers() ([]string, error) {
 	return out, nil
 }
 
-func rootAXFR(ns string) (zone, error) {
+// RootAXFR returns a Zone containing the ROOT zone
+func RootAXFR(ns string) (Zone, error) {
 	m := new(dns.Msg)
 	m.SetQuestion(".", dns.TypeAXFR)
 
 	t := new(dns.Transfer)
 
-	var root zone
+	var root Zone
 	startTime := time.Now()
 
 	env, err := t.In(m, fmt.Sprintf("%s:53", ns))

@@ -1,4 +1,4 @@
-package main
+package psl
 
 import (
 	"net/http"
@@ -9,7 +9,7 @@ import (
 
 const pslURL = "https://publicsuffix.org/list/public_suffix_list.dat"
 
-func getPSLDomsins() ([]string, error) {
+func GetDomains() ([]string, error) {
 	resp, err := http.Get(pslURL)
 	if err != nil {
 		return nil, err
