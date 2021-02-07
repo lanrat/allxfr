@@ -1,7 +1,6 @@
-package main
+package save
 
 import (
-	"bufio"
 	"fmt"
 
 	"github.com/miekg/dns"
@@ -18,10 +17,4 @@ func RRString(rr dns.RR) string {
 		return aaaa.Hdr.String() + ipStr
 	}
 	return rr.String()
-}
-
-// writeComment adds a zone file comment to the writer w
-func writeComment(w *bufio.Writer, key, value string) error {
-	_, err := w.WriteString(fmt.Sprintf("; %s: %s\n", key, value))
-	return err
 }

@@ -1,7 +1,7 @@
 # creates static binaries
 CC := CGO_ENABLED=0 go build -ldflags "-w -s" -trimpath -a -installsuffix cgo
 
-SOURCES := $(shell find . -maxdepth 1 -type f -name '*.go')
+SOURCES := $(shell find . -type f -name '*.go')
 BIN := allxfr
 
 .PHONY: all fmt docker docker-unbound clean
@@ -17,8 +17,8 @@ run-unbound:
 docker: Dockerfile
 	docker build -t="lanrat/allxfr" .
 
-$(BIN): $(SOURCES) $(MODULE_SOURCES) go.mod go.sum
-	$(CC) -o $@ $(SOURCES)
+$(BIN): $(SOURCES) go.mod go.sum
+	$(CC) -o $@ 
 
 check:
 	golangci-lint run
