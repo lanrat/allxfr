@@ -14,6 +14,8 @@ type Zone struct {
 	NS map[string][]string
 	// map of nameservers to ipv4 and ipv6
 	IP map[string][]net.IP
+	// number of records added to the zone
+	Records int64
 }
 
 // AddRecord adds NS, A, AAAA records to the zone
@@ -66,6 +68,7 @@ func (z *Zone) AddNS(domain, nameserver string) {
 	if len(nameserver) > 0 {
 		nameserver = strings.ToLower(nameserver)
 		z.NS[domain] = append(z.NS[domain], nameserver)
+		z.Records++
 	}
 }
 
@@ -80,6 +83,7 @@ func (z *Zone) AddIP(nameserver string, ip net.IP) {
 		z.IP[nameserver] = make([]net.IP, 0, 4)
 	}
 	z.IP[nameserver] = append(z.IP[nameserver], ip)
+	z.Records++
 }
 
 // Print prints the zone to stdout

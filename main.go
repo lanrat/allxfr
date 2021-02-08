@@ -66,13 +66,17 @@ func main() {
 		// not all the root nameservers allow AXFR, try them until we find one that does
 		for _, ns := range rootNameservers {
 			v("trying root nameserver %s", ns)
+			startTime := time.Now()
 			z, err = zone.RootAXFR(ns)
 			if err == nil {
+				took := time.Since(startTime).Round(time.Millisecond)
+				log.Printf("ROOT %s xfr size: %d records in %s \n", ns, z.Records, took.String())
 				break
 			}
 		}
 	} else {
 		// zone file is provided
+		v("parsing zonefile: %q\n", *zonefile)
 		z, err = zone.ParseZoneFile(*zonefile)
 		check(err)
 	}

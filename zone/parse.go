@@ -3,7 +3,6 @@ package zone
 import (
 	"compress/gzip"
 	"io"
-	"log"
 	"os"
 	"strings"
 
@@ -28,7 +27,6 @@ func ParseZoneFile(filename string) (Zone, error) {
 		fileReader = gz
 		defer gz.Close()
 	}
-	log.Printf("parsing zonefile: %q\n", filename)
 	zp := dns.NewZoneParser(fileReader, "", "")
 	for rr, ok := zp.Next(); ok; rr, ok = zp.Next() {
 		z.AddRecord(rr)
@@ -37,6 +35,5 @@ func ParseZoneFile(filename string) (Zone, error) {
 	if err := zp.Err(); err != nil {
 		return z, err
 	}
-	//log.Printf("zonefile parsing done")
 	return z, nil
 }
