@@ -110,21 +110,24 @@ func (f *File) Finish() error {
 			return err
 		}
 	}
-	err := f.bufWriter.Flush()
-	if err != nil {
-		return err
-	}
-	err = f.gzWriter.Flush()
-	if err != nil {
-		return err
-	}
-	err = f.gzWriter.Close()
-	if err != nil {
-		return err
-	}
-	err = f.fileWriter.Close()
-	if err != nil {
-		return err
+	var err error
+	if f.bufWriter != nil {
+		err = f.bufWriter.Flush()
+		if err != nil {
+			return err
+		}
+		err = f.gzWriter.Flush()
+		if err != nil {
+			return err
+		}
+		err = f.gzWriter.Close()
+		if err != nil {
+			return err
+		}
+		err = f.fileWriter.Close()
+		if err != nil {
+			return err
+		}
 	}
 	if f.records > 1 {
 		err = os.Rename(f.filenameTmp, f.filename)
