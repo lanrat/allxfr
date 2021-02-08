@@ -100,8 +100,17 @@ func (f *File) AddRR(rr dns.RR) error {
 	return nil
 }
 
+// Abort stops processing the new zone file and removes it from disk
+func (f *File) Abort() error {
+	f.records = 0 // forces finish to remove the file
+	return f.Finish()
+}
+
 // Finish adds closing comments and flushes and closes all buffers/files
 func (f *File) Finish() error {
+	if f.closed {
+		return nil
+	}
 	// function to finish/close/safe the files when done
 	if f.records > 1 {
 		// save record count comment at end of zone file
