@@ -29,11 +29,13 @@ var (
 	dryRun    = flag.Bool("dry-run", false, "only test if xfr is allowed by retrieving one envelope")
 	retry     = flag.Int("retry", 3, "number of times to retry failed operations")
 	overwrite = flag.Bool("overwrite", false, "if zone already exists on disk, overwrite it with newer data")
+	recurse   = flag.Bool("recursive", false, "recursively query all found nameservers from parent zone WARNING: dangerous and noisy")
 )
 
 var (
 	localNameserver string
 	totalXFR        uint32
+	z               zone.Zone
 )
 
 const (
@@ -58,7 +60,6 @@ func main() {
 	v("using initial nameserver %s", localNameserver)
 
 	start := time.Now()
-	var z zone.Zone
 	if len(*zonefile) == 0 {
 		rootNameservers, err := zone.GetRootServers(localNameserver)
 		check(err)
@@ -111,7 +112,7 @@ func main() {
 
 	// start workers
 	for i := uint(0); i < *parallel; i++ {
-		g.Go(func() error { return worker(z, zoneChan) })
+		g.Go(func() error { return worker(zoneChan) })
 	}
 
 	err = g.Wait()
@@ -121,13 +122,13 @@ func main() {
 	v("exiting normally\n")
 }
 
-func worker(z zone.Zone, c chan string) error {
+func worker(c chan string) error {
 	for {
 		domain, more := <-c
 		if !more {
 			return nil
 		}
-		err := axfrWorker(z, domain)
+		err := axfrWorker(domain)
 		if err != nil {
 			return err
 		}

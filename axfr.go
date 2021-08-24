@@ -10,13 +10,12 @@ import (
 	"time"
 
 	"github.com/lanrat/allxfr/save"
-	"github.com/lanrat/allxfr/zone"
 
 	"github.com/miekg/dns"
 )
 
 // axfrWorker iterate through all possabilities and queries attempting an AXFR
-func axfrWorker(z zone.Zone, domain string) error {
+func axfrWorker(domain string) error {
 	ips := make(map[string]bool)
 	domain = dns.Fqdn(domain)
 	var err error
@@ -195,6 +194,11 @@ func axfrToFile(zone string, ip net.IP, nameserver string) (int64, error) {
 			return int64(len(e.RR)), nil
 		}
 		for _, rr := range e.RR {
+			// TODO allow recursive without saving to file (in dry-run mode)
+			if *recurse {
+				// TODO this is not thread safe and may not work
+				z.AddRecord(rr)
+			}
 			// create file here on first iteration of loop
 			err := zonefile.AddRR(rr)
 			if err != nil {

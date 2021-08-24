@@ -39,10 +39,11 @@ func (z *Zone) GetNameChan() chan string {
 			if domain == "." {
 				continue
 			}
-			parts := strings.Split(domain, ".")
+			// TODO allow arpa? (behind flag)
+			/*parts := strings.Split(domain, ".")
 			if parts[len(parts)-2] == "arpa" {
 				continue
-			}
+			}*/
 			out <- domain
 		}
 		close(out)
