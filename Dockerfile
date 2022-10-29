@@ -3,6 +3,9 @@ FROM golang:alpine AS build-env
 RUN apk update && apk add --no-cache make git
 
 WORKDIR /go/app/
+COPY go.mod go.sum ./
+RUN go mod download
+
 COPY . .
 RUN make
 
