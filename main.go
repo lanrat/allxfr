@@ -29,6 +29,7 @@ var (
 	dryRun    = flag.Bool("dry-run", false, "only test if xfr is allowed by retrieving one envelope")
 	retry     = flag.Int("retry", 3, "number of times to retry failed operations")
 	overwrite = flag.Bool("overwrite", false, "if zone already exists on disk, overwrite it with newer data")
+	root      = flag.Bool("root", false, "axfr all the root zones")
 )
 
 var (
@@ -49,9 +50,9 @@ func main() {
 	if *retry < 1 {
 		log.Fatal("retry must be positive")
 	}
-	if flag.NArg() > 0 {
-		log.Fatalf("unexpected arguments %v", flag.Args())
-	}
+	// if flag.NArg() > 0 {
+	// 	log.Fatalf("unexpected arguments %v", flag.Args())
+	// }
 	var err error
 	localNameserver, err = getNameserver()
 	check(err)
@@ -59,7 +60,7 @@ func main() {
 
 	start := time.Now()
 	var z zone.Zone
-	if len(*zonefile) == 0 {
+	if *root {
 		rootNameservers, err := zone.GetRootServers(localNameserver)
 		check(err)
 		// get zone file from root AXFR
@@ -74,15 +75,16 @@ func main() {
 				break
 			}
 		}
-	} else {
+	}
+	if len(*zonefile) > 0 {
 		// zone file is provided
 		v("parsing zonefile: %q\n", *zonefile)
 		z, err = zone.ParseZoneFile(*zonefile)
 		check(err)
 	}
 
-	if z.CountNS() == 0 {
-		log.Fatal("Got empty zone")
+	for _, domain := range flag.Args() {
+		z.AddNS(domain, "")
 	}
 
 	if *usePSL {
@@ -94,7 +96,12 @@ func main() {
 		v("added %d domains from PSL\n", len(pslDomains))
 	}
 
+	if z.CountNS() == 0 {
+		log.Fatal("Nothing to do")
+	}
+
 	// create outpout dir if does not exist
+	// TODO fix dry run causing panics on save
 	if !*dryRun {
 		if _, err := os.Stat(*saveDir); os.IsNotExist(err) {
 			err = os.MkdirAll(*saveDir, os.ModePerm)

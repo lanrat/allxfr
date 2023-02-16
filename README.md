@@ -23,7 +23,7 @@ An example Docker configuration for Unbound is provided in the `unbound/` direct
 ## Example
 
 ```console
-./allxfr -dry-run
+./allxfr -dry-run --root
 ROOT g.root-servers.net. xfr size: 22017 records in 1.334s
 mr. ns-mr.nic.tn. (41.228.63.70) xfr size: 444 records in 337ms
 sl. ns1.neoip.com. (45.83.41.38) xfr size: 455 records in 592ms
@@ -69,6 +69,8 @@ Usage of ./allxfr:
         attempt AXFR from zones listed in the public suffix list, requires -ns flag
   -retry int
         number of times to retry failed operations (default 3)
+  -root
+        axfr all the root zones
   -save-all
         attempt AXFR from every nameserver for a given zone and save all answers
   -verbose
