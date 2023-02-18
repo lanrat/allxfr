@@ -4,9 +4,13 @@ CC := CGO_ENABLED=0 go build -ldflags "-w -s" -trimpath -a -installsuffix cgo
 SOURCES := $(shell find . -type f -name '*.go')
 BIN := allxfr
 
-.PHONY: all fmt docker docker-unbound clean
+.PHONY: all fmt docker docker-unbound clean update-deps
 
 all: allxfr
+
+update-deps: go.mod
+	GOPROXY=direct go get -u ./...
+	go mod tidy
 
 docker-unbound: unbound/Dockerfile
 	docker build -t="lanrat/unbound" unbound/
