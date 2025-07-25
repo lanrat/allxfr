@@ -1,4 +1,4 @@
-name: Go
+name: Lint
 
 on:
   push:
@@ -7,9 +7,8 @@ on:
     branches: [ main ]
 
 jobs:
-
-  build:
-    name: Build
+  golangci:
+    name: lint
     runs-on: ubuntu-latest
     steps:      
       - uses: actions/checkout@v4
@@ -17,9 +16,6 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-
-      - name: Get dependencies
-        run: go mod download
-
-      - name: Build
-        run: go build -v .
+      
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v8

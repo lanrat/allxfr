@@ -1,0 +1,19 @@
+{
+    "version": "0.2",
+    "ignorePaths": [],
+    "dictionaryDefinitions": [],
+    "dictionaries": [],
+    "words": [
+        "allxfr",
+        "AXFR",
+        "golangci",
+        "ixfr",
+        "lanrat",
+        "miekg",
+        "publicsuffix",
+        "weppos",
+        "zonefile"
+    ],
+    "ignoreWords": [],
+    "import": []
+}

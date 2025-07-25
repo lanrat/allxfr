@@ -1,3 +1,4 @@
+// Package psl provides functionality to fetch domains from the Public Suffix List.
 package psl
 
 import (
@@ -14,7 +15,7 @@ func GetDomains() ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	list := publicsuffix.NewList()
 	options := &publicsuffix.ParserOption{

@@ -1,3 +1,4 @@
+// Package zone provides functionality for parsing and managing DNS zone files.
 package zone
 
 import (
@@ -18,14 +19,14 @@ func ParseZoneFile(filename string) (Zone, error) {
 	if err != nil {
 		return z, err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	if strings.HasSuffix(filename, ".gz") {
 		gz, err := gzip.NewReader(file)
 		if err != nil {
 			return z, err
 		}
 		fileReader = gz
-		defer gz.Close()
+		defer func() { _ = gz.Close() }()
 	}
 	zp := dns.NewZoneParser(fileReader, "", "")
 	for rr, ok := zp.Next(); ok; rr, ok = zp.Next() {

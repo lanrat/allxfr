@@ -43,7 +43,7 @@ func (f *File) WriteComment(comment string) error {
 	if err != nil {
 		return err
 	}
-	_, err = f.bufWriter.WriteString(fmt.Sprintf("; %s", comment))
+	_, err = fmt.Fprintf(f.bufWriter, "; %s", comment)
 	return err
 }
 
@@ -92,7 +92,7 @@ func (f *File) AddRR(rr dns.RR) error {
 		return err
 	}
 
-	_, err = f.bufWriter.WriteString(fmt.Sprintf("%s\n", RRString(rr)))
+	_, err = fmt.Fprintf(f.bufWriter, "%s\n", RRString(rr))
 	if err != nil {
 		return err
 	}
