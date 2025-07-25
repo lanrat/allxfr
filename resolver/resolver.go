@@ -135,6 +135,39 @@ func (r *Resolver) Resolve(domain string, qtype uint16) (*Result, error) {
 	return result, nil
 }
 
+// ResolveAll performs a recursive DNS lookup for the given domain and query type,
+// querying ALL authoritative nameservers and returning the union of all answers.
+// Unlike Resolve which returns after the first successful response, ResolveAll
+// queries every authoritative nameserver at each level and merges all results.
+//
+// The domain parameter should be a valid domain name (will be converted to FQDN).
+// The qtype parameter specifies the DNS record type (e.g., dns.TypeA, dns.TypeAAAA).
+//
+// Returns a Result containing the merged DNS response sections from all nameservers,
+// or an error if the resolution fails.
+func (r *Resolver) ResolveAll(domain string, qtype uint16) (*Result, error) {
+	domain = dns.Fqdn(domain)
+
+	cacheKey := r.makeCacheKey(domain+"_ALL", qtype)
+	if cached, found := r.cache.get(cacheKey); found {
+		return cached, nil
+	}
+
+	result, err := r.resolveRecursiveAll(domain, qtype, getRootServers(), 0)
+	if err != nil {
+		return nil, err
+	}
+
+	if result != nil && result.Rcode == dns.RcodeSuccess {
+		ttl := r.calculateTTL(result)
+		if ttl > 0 {
+			r.cache.put(cacheKey, result, ttl)
+		}
+	}
+
+	return result, nil
+}
+
 func (r *Resolver) makeCacheKey(domain string, qtype uint16) string {
 	return domain + ":" + strconv.FormatUint(uint64(qtype), 10)
 }
@@ -294,4 +327,124 @@ func (r *Resolver) resolveNameservers(nsRecords []string, additional []dns.RR) [
 	}
 
 	return nameservers
+}
+
+// mergeResults combines multiple Result structs into a single Result,
+// deduplicating records and using the best available Rcode and Authoritative status.
+func mergeResults(results []*Result) *Result {
+	if len(results) == 0 {
+		return nil
+	}
+
+	merged := &Result{
+		Answer:        []dns.RR{},
+		Authority:     []dns.RR{},
+		Additional:    []dns.RR{},
+		Rcode:         dns.RcodeServerFailure,
+		Authoritative: false,
+	}
+
+	rrSeen := make(map[string]bool)
+
+	for _, result := range results {
+		if result == nil {
+			continue
+		}
+
+		if result.Rcode == dns.RcodeSuccess {
+			merged.Rcode = dns.RcodeSuccess
+		} else if merged.Rcode == dns.RcodeServerFailure && result.Rcode == dns.RcodeNameError {
+			merged.Rcode = dns.RcodeNameError
+		}
+
+		if result.Authoritative {
+			merged.Authoritative = true
+		}
+
+		for _, rr := range result.Answer {
+			key := rr.String()
+			if !rrSeen[key] {
+				rrSeen[key] = true
+				merged.Answer = append(merged.Answer, rr)
+			}
+		}
+
+		for _, rr := range result.Authority {
+			key := rr.String()
+			if !rrSeen[key] {
+				rrSeen[key] = true
+				merged.Authority = append(merged.Authority, rr)
+			}
+		}
+
+		for _, rr := range result.Additional {
+			key := rr.String()
+			if !rrSeen[key] {
+				rrSeen[key] = true
+				merged.Additional = append(merged.Additional, rr)
+			}
+		}
+	}
+
+	return merged
+}
+
+// resolveRecursiveAll performs recursive resolution by querying ALL nameservers
+// at each level and merging their responses, unlike resolveRecursive which stops
+// at the first successful response.
+func (r *Resolver) resolveRecursiveAll(domain string, qtype uint16, nameservers []string, depth int) (*Result, error) {
+	if depth > maxRecursionDepth {
+		return nil, fmt.Errorf("maximum recursion depth exceeded")
+	}
+
+	if len(nameservers) == 0 {
+		return nil, fmt.Errorf("no nameservers available")
+	}
+
+	var allResults []*Result
+	var hasSuccessfulQuery bool
+
+	for _, ns := range nameservers {
+		result, err := r.queryNameserver(ns, domain, qtype)
+		if err != nil {
+			continue
+		}
+
+		hasSuccessfulQuery = true
+		allResults = append(allResults, result)
+	}
+
+	if !hasSuccessfulQuery {
+		return nil, fmt.Errorf("no nameservers responded for %s", domain)
+	}
+
+	merged := mergeResults(allResults)
+	if merged == nil {
+		return nil, fmt.Errorf("no valid responses for %s", domain)
+	}
+
+	if merged.Rcode != dns.RcodeSuccess {
+		return merged, nil
+	}
+
+	if len(merged.Answer) > 0 {
+		merged.Answer = r.followCNAME(merged.Answer, qtype, depth)
+		return merged, nil
+	}
+
+	if len(merged.Authority) > 0 {
+		nsRecords := r.extractNSRecords(merged.Authority)
+		if len(nsRecords) == 0 {
+			return merged, nil
+		}
+
+		nextNS := r.resolveNameservers(nsRecords, merged.Additional)
+		if len(nextNS) == 0 {
+			return merged, nil
+		}
+
+		return r.resolveRecursiveAll(domain, qtype, nextNS, depth+1)
+	}
+
+	return merged, nil
 }

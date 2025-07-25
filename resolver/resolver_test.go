@@ -282,3 +282,55 @@ func compareStringSets(a, b []string) bool {
 
 	return true
 }
+
+func TestResolverResolveAll(t *testing.T) {
+	resolver := New()
+	testDomains := []string{
+		"google.com",
+		"github.com",
+	}
+
+	for _, domain := range testDomains {
+		t.Run(domain, func(t *testing.T) {
+			resultAll, err := resolver.ResolveAll(domain, dns.TypeA)
+			if err != nil {
+				t.Fatalf("Failed to resolve %s with ResolveAll: %v", domain, err)
+			}
+
+			resultNormal, err := resolver.Resolve(domain, dns.TypeA)
+			if err != nil {
+				t.Fatalf("Failed to resolve %s with Resolve: %v", domain, err)
+			}
+
+			if len(resultAll.Answer) == 0 {
+				t.Fatalf("No A records found for %s with ResolveAll", domain)
+			}
+
+			if len(resultNormal.Answer) == 0 {
+				t.Fatalf("No A records found for %s with Resolve", domain)
+			}
+
+			var allIPs []net.IP
+			for _, rr := range resultAll.Answer {
+				if a, ok := rr.(*dns.A); ok {
+					allIPs = append(allIPs, a.A)
+				}
+			}
+
+			var normalIPs []net.IP
+			for _, rr := range resultNormal.Answer {
+				if a, ok := rr.(*dns.A); ok {
+					normalIPs = append(normalIPs, a.A)
+				}
+			}
+
+			if len(allIPs) < len(normalIPs) {
+				t.Fatalf("ResolveAll returned fewer IPs (%d) than Resolve (%d) for %s", 
+					len(allIPs), len(normalIPs), domain)
+			}
+
+			t.Logf("ResolveAll found %d A records for %s", len(allIPs), domain)
+			t.Logf("Resolve found %d A records for %s", len(normalIPs), domain)
+		})
+	}
+}
