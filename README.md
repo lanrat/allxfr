@@ -1,6 +1,6 @@
 # ALLXFR
 
-### AXFR all the things!
+## AXFR all the things!
 
 <img src="https://user-images.githubusercontent.com/164192/69487828-764bc280-0e15-11ea-8f67-41dd27ac32d8.jpg" width="400" height="300">
 
@@ -51,8 +51,6 @@ Usage of ./allxfr:
         only test if xfr is allowed by retrieving one envelope
   -ixfr
         attempt an IXFR instead of AXFR
-  -ns string
-        nameserver to use for manually querying of records not in zone file
   -out string
         directory to save found zones in (default "zones")
   -overwrite
@@ -60,7 +58,7 @@ Usage of ./allxfr:
   -parallel uint
         number of parallel zone transfers to perform (default 10)
   -psl
-        attempt AXFR from zones listed in the public suffix list, requires -ns flag
+        attempt AXFR from zones listed in the public suffix list
   -retry int
         number of times to retry failed operations (default 3)
   -save-all
@@ -69,6 +67,8 @@ Usage of ./allxfr:
         enable HTTP status server on specified port (e.g., '8080')
   -verbose
         enable verbose output
+  -version
+        print version and exit
   -zonefile string
         use the provided zonefile instead of getting the root zonefile
 ```
