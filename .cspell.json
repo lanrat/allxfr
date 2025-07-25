@@ -12,6 +12,7 @@
         "golangci",
         "GOPROXY",
         "hostnames",
+        "installsuffix",
         "ixfr",
         "lanrat",
         "miekg",
@@ -21,6 +22,7 @@
         "qtype",
         "Rcode",
         "staticcheck",
+        "trimpath",
         "weppos",
         "zonefile"
     ],

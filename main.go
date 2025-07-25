@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/lanrat/allxfr/resolver"
+	"github.com/lanrat/allxfr/status"
 	"github.com/lanrat/allxfr/zone"
 
 	"github.com/lanrat/allxfr/psl"
@@ -17,22 +18,26 @@ import (
 )
 
 var (
-	parallel   = flag.Uint("parallel", 10, "number of parallel zone transfers to perform")
-	saveDir    = flag.String("out", "zones", "directory to save found zones in")
-	verbose    = flag.Bool("verbose", false, "enable verbose output")
-	zonefile   = flag.String("zonefile", "", "use the provided zonefile instead of getting the root zonefile")
-	saveAll    = flag.Bool("save-all", false, "attempt AXFR from every nameserver for a given zone and save all answers")
-	usePSL     = flag.Bool("psl", false, "attempt AXFR from zones listed in the public suffix list, requires -ns flag")
-	ixfr       = flag.Bool("ixfr", false, "attempt an IXFR instead of AXFR")
-	dryRun     = flag.Bool("dry-run", false, "only test if xfr is allowed by retrieving one envelope")
-	retry      = flag.Int("retry", 3, "number of times to retry failed operations")
-	overwrite  = flag.Bool("overwrite", false, "if zone already exists on disk, overwrite it with newer data")
-	statusPort = flag.String("status-port", "", "enable HTTP status server on specified port (e.g., '8080')")
+	parallel    = flag.Uint("parallel", 10, "number of parallel zone transfers to perform")
+	saveDir     = flag.String("out", "zones", "directory to save found zones in")
+	verbose     = flag.Bool("verbose", false, "enable verbose output")
+	zonefile    = flag.String("zonefile", "", "use the provided zonefile instead of getting the root zonefile")
+	saveAll     = flag.Bool("save-all", false, "attempt AXFR from every nameserver for a given zone and save all answers")
+	usePSL      = flag.Bool("psl", false, "attempt AXFR from zones listed in the public suffix list")
+	ixfr        = flag.Bool("ixfr", false, "attempt an IXFR instead of AXFR")
+	dryRun      = flag.Bool("dry-run", false, "only test if xfr is allowed by retrieving one envelope")
+	retry       = flag.Int("retry", 3, "number of times to retry failed operations")
+	overwrite   = flag.Bool("overwrite", false, "if zone already exists on disk, overwrite it with newer data")
+	statusPort  = flag.String("status-port", "", "enable HTTP status server on specified port (e.g., '8080')")
+	showVersion = flag.Bool("version", false, "print version and exit") // Show version
+
 )
 
 var (
-	totalXFR uint32
-	query    resolver.Resolver
+	version      = "dev" // Version string, set at build time
+	totalXFR     uint32
+	resolve      *resolver.Resolver
+	statusServer *status.StatusServer
 )
 
 const (
@@ -41,24 +46,33 @@ const (
 
 func main() {
 	flag.Parse()
+	if *showVersion {
+		fmt.Println(version)
+		return
+	}
 	if *retry < 1 {
 		log.Fatal("retry must be positive")
 	}
-	if flag.NArg() > 0 {
-		log.Fatalf("unexpected arguments %v", flag.Args())
-	}
+	// if flag.NArg() > 0 {
+	// 	log.Fatalf("unexpected arguments %v", flag.Args())
+	// }
 
 	// Start HTTP status server if port is specified
 	if *statusPort != "" {
-		StartStatusServer(*statusPort)
+		statusServer = status.StartStatusServer(*statusPort)
 	}
 
-	query = *resolver.NewWithTimeout(globalTimeout)
-
+	resolve = resolver.New()
 	start := time.Now()
 	var z zone.Zone
 	var err error
-	if len(*zonefile) == 0 {
+
+	if len(*zonefile) > 1 {
+		// zone file is provided
+		v("parsing zonefile: %q\n", *zonefile)
+		z, err = zone.ParseZoneFile(*zonefile)
+		check(err)
+	} else if len(*zonefile) == 0 && flag.NArg() == 0 {
 		// get zone file from root AXFR
 		// not all the root nameservers allow AXFR, try them until we find one that does
 		for _, ns := range resolver.RootServerNames {
@@ -71,11 +85,12 @@ func main() {
 				break
 			}
 		}
-	} else {
-		// zone file is provided
-		v("parsing zonefile: %q\n", *zonefile)
-		z, err = zone.ParseZoneFile(*zonefile)
-		check(err)
+	}
+
+	if flag.NArg() > 0 {
+		for _, domain := range flag.Args() {
+			z.AddNS(domain, "")
+		}
 	}
 
 	if z.CountNS() == 0 {
@@ -139,7 +154,7 @@ func worker(z zone.Zone, c chan string) error {
 			if statusServer != nil {
 				statusServer.FailTransfer(domain, err.Error())
 			}
-			return err
+			continue
 		}
 
 		// If no error occurred, the domain processing is complete

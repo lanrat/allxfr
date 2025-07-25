@@ -13,6 +13,7 @@ type cacheEntry struct {
 	result   *Result
 	expiry   time.Time
 	lastUsed time.Time
+	negative bool // true for NXDOMAIN/negative cache entries
 }
 
 type cacheNode struct {
@@ -70,6 +71,14 @@ func (c *dnsCache) get(key string) (*Result, bool) {
 }
 
 func (c *dnsCache) put(key string, result *Result, ttl time.Duration) {
+	c.putWithNegative(key, result, ttl, false)
+}
+
+func (c *dnsCache) putNegative(key string, result *Result, ttl time.Duration) {
+	c.putWithNegative(key, result, ttl, true)
+}
+
+func (c *dnsCache) putWithNegative(key string, result *Result, ttl time.Duration, negative bool) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
@@ -78,6 +87,7 @@ func (c *dnsCache) put(key string, result *Result, ttl time.Duration) {
 		result:   result,
 		expiry:   now.Add(ttl),
 		lastUsed: now,
+		negative: negative,
 	}
 
 	if node, exists := c.cache[key]; exists {

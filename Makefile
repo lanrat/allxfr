@@ -1,12 +1,14 @@
+default: allxfr
+
+include release.mk
+
 # creates static binaries
-CC := CGO_ENABLED=0 go build -ldflags "-w -s" -trimpath -a -installsuffix cgo
+CC := CGO_ENABLED=0 go build -ldflags "-w -s -X main.version=${VERSION}" -trimpath -a -installsuffix cgo
 
 SOURCES := $(shell find . -type f -name '*.go')
 BIN := allxfr
 
 .PHONY: all fmt docker docker-unbound clean deps update-deps
-
-all: allxfr
 
 docker-unbound: unbound/Dockerfile
 	docker build -t="lanrat/unbound" unbound/

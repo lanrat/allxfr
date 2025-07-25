@@ -1,4 +1,4 @@
-package main
+package status
 
 import (
 	"encoding/json"
@@ -41,8 +41,6 @@ type HealthResponse struct {
 	Status  string `json:"status"`
 	Message string `json:"message"`
 }
-
-var statusServer *StatusServer
 
 // NewStatusServer creates a new status server instance
 func NewStatusServer() *StatusServer {
@@ -138,34 +136,40 @@ func (s *StatusServer) GetStatus() StatusResponse {
 
 // HTTP Handlers
 
-func statusHandler(w http.ResponseWriter, r *http.Request) {
-	if statusServer == nil {
+func (s *StatusServer) statusHandler(w http.ResponseWriter, r *http.Request) {
+	if s == nil {
 		http.Error(w, "Status server not initialized", http.StatusInternalServerError)
 		return
 	}
 
-	status := statusServer.GetStatus()
+	status := s.GetStatus()
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(status)
+	if err := json.NewEncoder(w).Encode(status); err != nil {
+		http.Error(w, "Failed to encode status", http.StatusInternalServerError)
+		return
+	}
 }
 
-func healthHandler(w http.ResponseWriter, r *http.Request) {
+func (s *StatusServer) healthHandler(w http.ResponseWriter, r *http.Request) {
 	health := HealthResponse{
 		Status:  "ok",
 		Message: "ALLXFR is running",
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(health)
+	if err := json.NewEncoder(w).Encode(health); err != nil {
+		http.Error(w, "Failed to encode health response", http.StatusInternalServerError)
+		return
+	}
 }
 
-func progressHandler(w http.ResponseWriter, r *http.Request) {
-	if statusServer == nil {
+func (s *StatusServer) progressHandler(w http.ResponseWriter, r *http.Request) {
+	if s == nil {
 		http.Error(w, "Status server not initialized", http.StatusInternalServerError)
 		return
 	}
 
-	status := statusServer.GetStatus()
+	status := s.GetStatus()
 
 	// Simplified progress response
 	attempted := status.Completed + status.Failed
@@ -185,17 +189,20 @@ func progressHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(progress)
+	if err := json.NewEncoder(w).Encode(progress); err != nil {
+		http.Error(w, "Failed to encode progress response", http.StatusInternalServerError)
+		return
+	}
 }
 
 // StartStatusServer starts the HTTP status server in a separate goroutine
-func StartStatusServer(port string) {
-	statusServer = NewStatusServer()
+func StartStatusServer(port string) *StatusServer {
+	statusServer := NewStatusServer()
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/status", statusHandler)
-	mux.HandleFunc("/health", healthHandler)
-	mux.HandleFunc("/progress", progressHandler)
+	mux.HandleFunc("/status", statusServer.statusHandler)
+	mux.HandleFunc("/health", statusServer.healthHandler)
+	mux.HandleFunc("/progress", statusServer.progressHandler)
 
 	server := &http.Server{
 		Addr:    ":" + port,
@@ -213,4 +220,5 @@ func StartStatusServer(port string) {
 			log.Printf("Status server error: %v", err)
 		}
 	}()
+	return statusServer
 }

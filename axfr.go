@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -15,35 +16,43 @@ import (
 	"github.com/miekg/dns"
 )
 
+var ErrAxfrUnsupported = errors.New("AXFR Unsupported")
+
+func ErrorAxfrUnsupportedWrap(err error) error {
+	if err == nil {
+		return nil
+	}
+	errStr := err.Error()
+	// "bad xfr rcode: 5" - Refused
+	if errStr == "dns: bad xfr rcode: 5" {
+		err = fmt.Errorf("%w 'Refused': %w", ErrAxfrUnsupported, err)
+	}
+	//"bad xfr rcode: 9" - Not Authorized / Not Authenticated
+	if errStr == "dns: bad xfr rcode: 9" {
+		err = fmt.Errorf("%w 'Not Authorized': %w", ErrAxfrUnsupported, err)
+	}
+	return err
+}
+
 // axfrWorker iterate through all possibilities and queries attempting an AXFR
 func axfrWorker(z zone.Zone, domain string) error {
-	ips := make(map[string]bool)
+	attemptedIPs := make(map[string]bool)
 	domain = dns.Fqdn(domain)
 	var err error
-	var records int64
+	//var records int64
 	var anySuccess bool
 	for _, nameserver := range z.NS[domain] {
 		for _, ip := range z.IP[nameserver] {
 			ipString := string(ip.To16())
-			if !ips[ipString] {
-				ips[ipString] = true
-				for try := 0; try < *retry; try++ {
-					records, err = axfr(domain, nameserver, ip)
-					if err != nil {
-						v("[%s] %s", domain, err)
-					} else {
-						if records != 0 {
-							anySuccess = true
-							break
-						}
-					}
-					time.Sleep(1 * time.Second)
-				}
-				if !*saveAll && records != 0 {
-					return nil
-				}
+			if !attemptedIPs[ipString] {
+				attemptedIPs[ipString] = true
+				anySuccess, err = axfrRetry(ip, domain, nameserver)
 				if err != nil {
-					return err
+					continue
+				}
+				if anySuccess {
+					// got the zone
+					return nil
 				}
 			}
 		}
@@ -52,7 +61,7 @@ func axfrWorker(z zone.Zone, domain string) error {
 	// query NS and run axfr on missing IPs
 	var qNameservers []string
 	for try := 0; try < *retry; try++ {
-		result, err := query.ResolveAll(domain, dns.TypeNS)
+		result, err := resolve.Resolve(domain, dns.TypeNS)
 		if err != nil {
 			v("[%s] %s", domain, err)
 		} else {
@@ -69,7 +78,7 @@ func axfrWorker(z zone.Zone, domain string) error {
 	for _, nameserver := range qNameservers {
 		var qIPs []net.IP
 		for try := 0; try < *retry; try++ {
-			qIPs, err = query.LookupIPAll(nameserver)
+			qIPs, err = resolve.LookupIPAll(nameserver)
 			if err != nil {
 				v("[%s] %s", domain, err)
 			} else {
@@ -80,30 +89,19 @@ func axfrWorker(z zone.Zone, domain string) error {
 
 		for _, ip := range qIPs {
 			ipString := string(ip.To16())
-			if !ips[ipString] {
-				ips[ipString] = true
-				for try := 0; try < *retry; try++ {
-					v("[%s] trying AXFR: %s %s", domain, nameserver, ip.String())
-					records, err = axfr(domain, nameserver, ip)
-					if err != nil {
-						v("[%s] %s", domain, err)
-					} else {
-						if records != 0 {
-							anySuccess = true
-							break
-						}
-					}
-					time.Sleep(1 * time.Second)
-				}
-				if !*saveAll && records != 0 {
-					return nil
-				}
+			if !attemptedIPs[ipString] {
+				attemptedIPs[ipString] = true
+				v("[%s] trying non-glue AXFR: %s %s", domain, nameserver, ip.String())
+				anySuccess, err = axfrRetry(ip, domain, nameserver)
 				if err != nil {
-					return err
+					continue
+				}
+				if anySuccess {
+					// got the zone
+					return nil
 				}
 			}
 		}
-
 	}
 
 	// If no successful transfers occurred, mark domain as failed
@@ -112,6 +110,39 @@ func axfrWorker(z zone.Zone, domain string) error {
 	}
 
 	return nil
+}
+
+func axfrRetry(ip net.IP, domain, nameserver string) (bool, error) {
+	var err error
+	var records int64
+	var anySuccess bool
+
+	for try := 0; try < *retry; try++ {
+		records, err = axfr(domain, nameserver, ip)
+		if err != nil {
+			v("[%s] %s", domain, err)
+			// if axfr is unsupported by NS, then move on, otherwise retry
+			if errors.Is(err, ErrAxfrUnsupported) {
+				err = nil
+				// skip remaining tries with this IP
+				break
+			}
+		} else {
+			if records != 0 {
+				anySuccess = true
+				break
+			}
+		}
+		time.Sleep(1 * time.Second)
+	}
+	if !*saveAll && records != 0 {
+		return anySuccess, nil
+	}
+	if err != nil {
+		return anySuccess, err
+	}
+
+	return anySuccess, err
 }
 
 func axfr(domain, nameserver string, ip net.IP) (int64, error) {
@@ -202,13 +233,12 @@ func axfrToFile(zone string, ip net.IP, nameserver string) (int64, error) {
 
 	for e := range env {
 		if e.Error != nil {
+			err = ErrorAxfrUnsupportedWrap(e.Error)
 			// skip on this error
-			err = fmt.Errorf("transfer envelope error from zone: %s ip: %s (rec: %d, envelope: %d): %w", zone, ip.String(), zonefile.Records(), envelope, e.Error)
-			v("[%s] %s", zone, err)
-			err = nil
-			break
+			err = fmt.Errorf("transfer envelope error from zone: %s ip: %s (rec: %d, envelope: %d): %w", zone, ip.String(), zonefile.Records(), envelope, err)
+			return zonefile.Records(), err
 		}
-		// TODO don't need to create empty zone files for dry runs
+		// zonefile will not write anything to disk unless it has been provided records to write.
 		if *dryRun && len(e.RR) > 0 {
 			return int64(len(e.RR)), nil
 		}

@@ -39,8 +39,7 @@ func (z *Zone) GetNameChan() chan string {
 			if domain == "." {
 				continue
 			}
-			parts := strings.Split(domain, ".")
-			if parts[len(parts)-2] == "arpa" {
+			if domain == "arpa." || strings.HasSuffix(domain, ".arpa.") {
 				continue
 			}
 			out <- domain

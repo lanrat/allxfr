@@ -15,7 +15,9 @@ import (
 
 const (
 	maxRecursionDepth   = 30
-	defaultQueryTimeout = 15 * time.Second
+	defaultQueryTimeout = 5 * time.Second
+	maxFailures         = 5                // Circuit breaker threshold
+	circuitBreakerTTL   = 60 * time.Second // How long to avoid failed nameservers
 )
 
 // RootServerNames contains the hostnames of the DNS root servers.
@@ -45,8 +47,19 @@ var (
 // It follows the DNS resolution process by starting from root servers and following
 // referrals until it reaches an authoritative answer.
 type Resolver struct {
-	client dns.Client
-	cache  *dnsCache
+	client   dns.Client
+	cache    *dnsCache
+	rttStats map[string]*rttStats // RTT statistics per nameserver
+	rttMutex sync.RWMutex         // Protects rttStats map
+}
+
+type rttStats struct {
+	avgRTT     time.Duration
+	samples    int
+	lastSeen   time.Time
+	failures   int
+	lastFailed time.Time // When the last failure occurred
+	mu         sync.Mutex
 }
 
 // Result represents the outcome of a DNS query operation.
@@ -83,7 +96,8 @@ func NewWithCacheSize(cacheSize int, timeout time.Duration) *Resolver {
 				Timeout: timeout,
 			},
 		},
-		cache: newDNSCache(cacheSize),
+		cache:    newDNSCache(cacheSize),
+		rttStats: make(map[string]*rttStats),
 	}
 }
 
@@ -96,17 +110,27 @@ func getRootServers() []string {
 
 func resolveRootServers() []string {
 	var servers []string
+	var mu sync.Mutex
+	var wg sync.WaitGroup
 
+	// Resolve all root servers in parallel
 	for _, name := range RootServerNames {
-		ips, err := net.LookupIP(name)
-		if err != nil {
-			continue
-		}
+		wg.Add(1)
+		go func(hostname string) {
+			defer wg.Done()
+			ips, err := net.LookupIP(hostname)
+			if err != nil {
+				return
+			}
 
-		for _, ip := range ips {
-			servers = append(servers, net.JoinHostPort(ip.String(), "53"))
-		}
+			mu.Lock()
+			for _, ip := range ips {
+				servers = append(servers, net.JoinHostPort(ip.String(), "53"))
+			}
+			mu.Unlock()
+		}(name)
 	}
+	wg.Wait()
 
 	return servers
 }
@@ -133,10 +157,20 @@ func (r *Resolver) Resolve(domain string, qtype uint16) (*Result, error) {
 		return nil, err
 	}
 
-	if result != nil && result.Rcode == dns.RcodeSuccess {
+	if result != nil {
 		ttl := r.calculateTTL(result)
 		if ttl > 0 {
-			r.cache.put(cacheKey, result, ttl)
+			switch result.Rcode {
+			case dns.RcodeSuccess:
+				r.cache.put(cacheKey, result, ttl)
+			case dns.RcodeNameError:
+				// Cache NXDOMAIN responses with shorter TTL
+				negativeTTL := ttl
+				if negativeTTL > 5*time.Minute {
+					negativeTTL = 5 * time.Minute
+				}
+				r.cache.putNegative(cacheKey, result, negativeTTL)
+			}
 		}
 	}
 
@@ -166,10 +200,20 @@ func (r *Resolver) ResolveAll(domain string, qtype uint16) (*Result, error) {
 		return nil, err
 	}
 
-	if result != nil && result.Rcode == dns.RcodeSuccess {
+	if result != nil {
 		ttl := r.calculateTTL(result)
 		if ttl > 0 {
-			r.cache.put(cacheKey, result, ttl)
+			switch result.Rcode {
+			case dns.RcodeSuccess:
+				r.cache.put(cacheKey, result, ttl)
+			case dns.RcodeNameError:
+				// Cache NXDOMAIN responses with shorter TTL
+				negativeTTL := ttl
+				if negativeTTL > 5*time.Minute {
+					negativeTTL = 5 * time.Minute
+				}
+				r.cache.putNegative(cacheKey, result, negativeTTL)
+			}
 		}
 	}
 
@@ -219,24 +263,24 @@ func (r *Resolver) LookupIPAll(host string) ([]net.IP, error) {
 		result *Result
 		err    error
 	}
-	
+
 	aChan := make(chan resolveResult, 1)
 	aaaaChan := make(chan resolveResult, 1)
-	
+
 	// Query A records (IPv4) from all nameservers
 	go func() {
 		result, err := r.ResolveAll(host, dns.TypeA)
 		aChan <- resolveResult{result: result, err: err}
 	}()
-	
+
 	// Query AAAA records (IPv6) from all nameservers
 	go func() {
 		result, err := r.ResolveAll(host, dns.TypeAAAA)
 		aaaaChan <- resolveResult{result: result, err: err}
 	}()
-	
+
 	var ips []net.IP
-	
+
 	// Collect A record results
 	aResult := <-aChan
 	if aResult.err == nil && aResult.result.Rcode == dns.RcodeSuccess {
@@ -246,7 +290,7 @@ func (r *Resolver) LookupIPAll(host string) ([]net.IP, error) {
 			}
 		}
 	}
-	
+
 	// Collect AAAA record results
 	aaaaResult := <-aaaaChan
 	if aaaaResult.err == nil && aaaaResult.result.Rcode == dns.RcodeSuccess {
@@ -268,6 +312,115 @@ func (r *Resolver) makeCacheKey(domain string, qtype uint16) string {
 	return domain + ":" + strconv.FormatUint(uint64(qtype), 10)
 }
 
+func (r *Resolver) updateRTT(nameserver string, rtt time.Duration, success bool) {
+	r.rttMutex.Lock()
+	stats, exists := r.rttStats[nameserver]
+	if !exists {
+		stats = &rttStats{}
+		r.rttStats[nameserver] = stats
+	}
+	r.rttMutex.Unlock()
+
+	stats.mu.Lock()
+	defer stats.mu.Unlock()
+
+	if success {
+		stats.lastSeen = time.Now()
+		stats.failures = 0
+
+		if stats.samples == 0 {
+			stats.avgRTT = rtt
+			stats.samples = 1
+		} else {
+			// Exponential weighted moving average with alpha = 0.125
+			stats.avgRTT = stats.avgRTT*7/8 + rtt/8
+			stats.samples++
+		}
+	} else {
+		stats.failures++
+		stats.lastFailed = time.Now()
+	}
+}
+
+func (r *Resolver) sortNameserversByRTT(nameservers []string) []string {
+	if len(nameservers) <= 1 {
+		return nameservers
+	}
+
+	type nsWithRTT struct {
+		ns          string
+		rtt         time.Duration
+		failures    int
+		hasStat     bool
+		circuitOpen bool
+	}
+
+	var nsStats []nsWithRTT
+	now := time.Now()
+	r.rttMutex.RLock()
+	for _, ns := range nameservers {
+		stat := nsWithRTT{ns: ns}
+		if stats, exists := r.rttStats[ns]; exists {
+			stats.mu.Lock()
+			stat.rtt = stats.avgRTT
+			stat.failures = stats.failures
+			stat.hasStat = true
+
+			// Circuit breaker logic: avoid nameservers that have failed too many times recently
+			if stats.failures >= maxFailures &&
+				now.Sub(stats.lastFailed) < circuitBreakerTTL {
+				stat.circuitOpen = true
+			}
+			stats.mu.Unlock()
+		}
+		nsStats = append(nsStats, stat)
+	}
+	r.rttMutex.RUnlock()
+
+	// Sort by: circuit breaker status, then failures, then RTT, then stats availability
+	for i := 0; i < len(nsStats)-1; i++ {
+		for j := i + 1; j < len(nsStats); j++ {
+			// Always prefer nameservers with open circuits last
+			if nsStats[i].circuitOpen && !nsStats[j].circuitOpen {
+				nsStats[i], nsStats[j] = nsStats[j], nsStats[i]
+				continue
+			}
+			if !nsStats[i].circuitOpen && nsStats[j].circuitOpen {
+				continue
+			}
+
+			// Prefer nameservers with fewer failures
+			if nsStats[i].failures > nsStats[j].failures {
+				nsStats[i], nsStats[j] = nsStats[j], nsStats[i]
+				continue
+			}
+			if nsStats[i].failures < nsStats[j].failures {
+				continue
+			}
+
+			// If same failure count, prefer ones with stats
+			if !nsStats[i].hasStat && nsStats[j].hasStat {
+				nsStats[i], nsStats[j] = nsStats[j], nsStats[i]
+				continue
+			}
+			if nsStats[i].hasStat && !nsStats[j].hasStat {
+				continue
+			}
+
+			// If both have stats, prefer lower RTT
+			if nsStats[i].hasStat && nsStats[j].hasStat && nsStats[i].rtt > nsStats[j].rtt {
+				nsStats[i], nsStats[j] = nsStats[j], nsStats[i]
+			}
+		}
+	}
+
+	result := make([]string, len(nsStats))
+	for i, stat := range nsStats {
+		result[i] = stat.ns
+	}
+	return result
+}
+
 func (r *Resolver) calculateTTL(result *Result) time.Duration {
 	if result == nil {
 		return 0
@@ -284,6 +437,14 @@ func (r *Resolver) calculateTTL(result *Result) time.Duration {
 	for _, rr := range result.Authority {
 		if rr.Header().Ttl < minTTL {
 			minTTL = rr.Header().Ttl
+		}
+		// For NXDOMAIN, use SOA record's minimum TTL if available
+		if result.Rcode == dns.RcodeNameError {
+			if soa, ok := rr.(*dns.SOA); ok {
+				if soa.Minttl < minTTL {
+					minTTL = soa.Minttl
+				}
+			}
 		}
 	}
 
@@ -307,7 +468,10 @@ func (r *Resolver) resolveRecursive(domain string, qtype uint16, nameservers []s
 		return nil, fmt.Errorf("no nameservers available")
 	}
 
-	for _, ns := range nameservers {
+	// Sort nameservers by RTT for better performance
+	sortedNS := r.sortNameserversByRTT(nameservers)
+
+	for _, ns := range sortedNS {
 		result, err := r.queryNameserver(ns, domain, qtype)
 		if err != nil {
 			continue
@@ -352,10 +516,16 @@ func (r *Resolver) queryNameserver(nameserver, domain string, qtype uint16) (*Re
 	m.SetQuestion(domain, qtype)
 	m.RecursionDesired = false
 
+	start := time.Now()
 	resp, _, err := r.client.Exchange(m, nameserver)
+	rtt := time.Since(start)
+
 	if err != nil {
+		r.updateRTT(nameserver, 0, false)
 		return nil, err
 	}
+
+	r.updateRTT(nameserver, rtt, true)
 
 	return &Result{
 		Answer:        resp.Answer,
@@ -395,7 +565,9 @@ func (r *Resolver) extractNSRecords(authority []dns.RR) []string {
 
 func (r *Resolver) resolveNameservers(nsRecords []string, additional []dns.RR) []string {
 	var nameservers []string
+	var mu sync.Mutex
 
+	// Build map of glue records
 	additionalMap := make(map[string][]net.IP)
 	for _, rr := range additional {
 		switch rec := rr.(type) {
@@ -406,20 +578,38 @@ func (r *Resolver) resolveNameservers(nsRecords []string, additional []dns.RR) [
 		}
 	}
 
+	// Collect nameservers with glue records first
+	var missingGlue []string
 	for _, nsName := range nsRecords {
 		if ips, found := additionalMap[nsName]; found {
+			mu.Lock()
 			for _, ip := range ips {
 				nameservers = append(nameservers, net.JoinHostPort(ip.String(), "53"))
 			}
+			mu.Unlock()
 		} else {
-			// if missing glue, use local resolver to fix
-			ips, err := net.LookupIP(nsName)
-			if err == nil {
-				for _, ip := range ips {
-					nameservers = append(nameservers, net.JoinHostPort(ip.String(), "53"))
-				}
-			}
+			missingGlue = append(missingGlue, nsName)
 		}
+	}
+
+	// Resolve missing glue records in parallel
+	if len(missingGlue) > 0 {
+		var wg sync.WaitGroup
+		for _, nsName := range missingGlue {
+			wg.Add(1)
+			go func(hostname string) {
+				defer wg.Done()
+				ips, err := net.LookupIP(hostname)
+				if err == nil {
+					mu.Lock()
+					for _, ip := range ips {
+						nameservers = append(nameservers, net.JoinHostPort(ip.String(), "53"))
+					}
+					mu.Unlock()
+				}
+			}(nsName)
+		}
+		wg.Wait()
 	}
 
 	return nameservers
@@ -502,9 +692,9 @@ func (r *Resolver) resolveRecursiveAll(domain string, qtype uint16, nameservers 
 		result *Result
 		err    error
 	}
-	
+
 	resultChan := make(chan queryResult, len(nameservers))
-	
+
 	// Start goroutines for each nameserver
 	for _, ns := range nameservers {
 		go func(nameserver string) {
@@ -512,17 +702,17 @@ func (r *Resolver) resolveRecursiveAll(domain string, qtype uint16, nameservers 
 			resultChan <- queryResult{result: result, err: err}
 		}(ns)
 	}
-	
+
 	// Collect results from all goroutines
 	var allResults []*Result
 	var hasSuccessfulQuery bool
-	
+
 	for i := 0; i < len(nameservers); i++ {
 		qr := <-resultChan
 		if qr.err != nil {
 			continue
 		}
-		
+
 		hasSuccessfulQuery = true
 		allResults = append(allResults, qr.result)
 	}
