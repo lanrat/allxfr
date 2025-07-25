@@ -1,3 +1,5 @@
+// Package resolver provides a recursive DNS resolver that handles missing glue records
+// and implements caching for improved performance.
 package resolver
 
 import (
@@ -37,23 +39,34 @@ var (
 	rootServersOnce sync.Once
 )
 
+// Resolver implements a recursive DNS resolver with caching and missing glue record handling.
+// It follows the DNS resolution process by starting from root servers and following
+// referrals until it reaches an authoritative answer.
 type Resolver struct {
 	client dns.Client
 	cache  *dnsCache
 }
 
+// Result represents the outcome of a DNS query operation.
+// It contains the response sections and metadata from the DNS resolution process.
 type Result struct {
-	Answer        []dns.RR
-	Authority     []dns.RR
-	Additional    []dns.RR
-	Rcode         int
-	Authoritative bool
+	Answer        []dns.RR // Resource records that directly answer the query
+	Authority     []dns.RR // Authority section containing NS records for delegation
+	Additional    []dns.RR // Additional section containing glue records
+	Rcode         int      // DNS response code (e.g., NOERROR, NXDOMAIN)
+	Authoritative bool     // Whether the response came from an authoritative server
 }
 
+// New creates a new DNS resolver with default cache size.
+// The resolver is configured with appropriate timeouts and will handle
+// missing glue records automatically.
 func New() *Resolver {
 	return NewWithCacheSize(defaultCacheSize)
 }
 
+// NewWithCacheSize creates a new DNS resolver with the specified cache size.
+// The cacheSize parameter determines how many DNS responses can be cached
+// using an LRU eviction policy.
 func NewWithCacheSize(cacheSize int) *Resolver {
 	return &Resolver{
 		client: dns.Client{
@@ -90,6 +103,15 @@ func resolveRootServers() []string {
 	return servers
 }
 
+// Resolve performs a recursive DNS lookup for the given domain and query type.
+// It starts from the root servers and follows the DNS delegation chain until
+// it finds an authoritative answer. Results are cached based on their TTL values.
+//
+// The domain parameter should be a valid domain name (will be converted to FQDN).
+// The qtype parameter specifies the DNS record type (e.g., dns.TypeA, dns.TypeAAAA).
+//
+// Returns a Result containing the DNS response sections and metadata, or an error
+// if the resolution fails.
 func (r *Resolver) Resolve(domain string, qtype uint16) (*Result, error) {
 	domain = dns.Fqdn(domain)
 
@@ -259,6 +281,14 @@ func (r *Resolver) resolveNameservers(nsRecords []string, additional []dns.RR) [
 		if ips, found := additionalMap[nsName]; found {
 			for _, ip := range ips {
 				nameservers = append(nameservers, net.JoinHostPort(ip.String(), "53"))
+			}
+		} else {
+			// if missing glue, use local resolver to fix
+			ips, err := net.LookupIP(nsName)
+			if err == nil {
+				for _, ip := range ips {
+					nameservers = append(nameservers, net.JoinHostPort(ip.String(), "53"))
+				}
 			}
 		}
 	}
