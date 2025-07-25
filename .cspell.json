@@ -12,7 +12,10 @@
         "ixfr",
         "lanrat",
         "miekg",
+        "NXDOMAIN",
         "publicsuffix",
+        "qtype",
+        "Rcode",
         "staticcheck",
         "weppos",
         "zonefile"

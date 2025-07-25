@@ -31,6 +31,9 @@ update-deps: go.mod
 deps: go.mod
 	go mod download
 
+test:
+	go test -timeout 10s -v ./...
+
 clean:
 	rm $(BIN)
 
