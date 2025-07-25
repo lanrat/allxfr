@@ -9,7 +9,7 @@ on:
 jobs:
 
   build:
-    name: Build
+    name: Build and Test
     runs-on: ubuntu-latest
     steps:      
       - uses: actions/checkout@v4
@@ -19,7 +19,10 @@ jobs:
           go-version-file: go.mod
 
       - name: Get dependencies
-        run: go mod download
+        run: make deps
+
+      - name: Run tests
+        run: make test
 
       - name: Build
-        run: go build -v .
+        run: make
