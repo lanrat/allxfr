@@ -212,24 +212,45 @@ func (r *Resolver) LookupIP(host string) ([]net.IP, error) {
 // LookupIPAll looks up host using the resolver and returns a slice of that host's IP addresses
 // from ALL authoritative nameservers. It works like LookupIP but uses ResolveAll instead of Resolve,
 // ensuring that IP addresses from all nameservers are collected and returned.
-// The function queries both A and AAAA records and returns all found IP addresses.
+// The function queries both A and AAAA records in parallel and returns all found IP addresses.
 func (r *Resolver) LookupIPAll(host string) ([]net.IP, error) {
-	var ips []net.IP
-
+	// Query A and AAAA records in parallel
+	type resolveResult struct {
+		result *Result
+		err    error
+	}
+	
+	aChan := make(chan resolveResult, 1)
+	aaaaChan := make(chan resolveResult, 1)
+	
 	// Query A records (IPv4) from all nameservers
-	resultA, err := r.ResolveAll(host, dns.TypeA)
-	if err == nil && resultA.Rcode == dns.RcodeSuccess {
-		for _, rr := range resultA.Answer {
+	go func() {
+		result, err := r.ResolveAll(host, dns.TypeA)
+		aChan <- resolveResult{result: result, err: err}
+	}()
+	
+	// Query AAAA records (IPv6) from all nameservers
+	go func() {
+		result, err := r.ResolveAll(host, dns.TypeAAAA)
+		aaaaChan <- resolveResult{result: result, err: err}
+	}()
+	
+	var ips []net.IP
+	
+	// Collect A record results
+	aResult := <-aChan
+	if aResult.err == nil && aResult.result.Rcode == dns.RcodeSuccess {
+		for _, rr := range aResult.result.Answer {
 			if a, ok := rr.(*dns.A); ok {
 				ips = append(ips, a.A)
 			}
 		}
 	}
-
-	// Query AAAA records (IPv6) from all nameservers
-	resultAAAA, err := r.ResolveAll(host, dns.TypeAAAA)
-	if err == nil && resultAAAA.Rcode == dns.RcodeSuccess {
-		for _, rr := range resultAAAA.Answer {
+	
+	// Collect AAAA record results
+	aaaaResult := <-aaaaChan
+	if aaaaResult.err == nil && aaaaResult.result.Rcode == dns.RcodeSuccess {
+		for _, rr := range aaaaResult.result.Answer {
 			if aaaa, ok := rr.(*dns.AAAA); ok {
 				ips = append(ips, aaaa.AAAA)
 			}
@@ -476,17 +497,34 @@ func (r *Resolver) resolveRecursiveAll(domain string, qtype uint16, nameservers 
 		return nil, fmt.Errorf("no nameservers available")
 	}
 
+	// Query all nameservers in parallel
+	type queryResult struct {
+		result *Result
+		err    error
+	}
+	
+	resultChan := make(chan queryResult, len(nameservers))
+	
+	// Start goroutines for each nameserver
+	for _, ns := range nameservers {
+		go func(nameserver string) {
+			result, err := r.queryNameserver(nameserver, domain, qtype)
+			resultChan <- queryResult{result: result, err: err}
+		}(ns)
+	}
+	
+	// Collect results from all goroutines
 	var allResults []*Result
 	var hasSuccessfulQuery bool
-
-	for _, ns := range nameservers {
-		result, err := r.queryNameserver(ns, domain, qtype)
-		if err != nil {
+	
+	for i := 0; i < len(nameservers); i++ {
+		qr := <-resultChan
+		if qr.err != nil {
 			continue
 		}
-
+		
 		hasSuccessfulQuery = true
-		allResults = append(allResults, result)
+		allResults = append(allResults, qr.result)
 	}
 
 	if !hasSuccessfulQuery {
