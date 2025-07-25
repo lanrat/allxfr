@@ -35,5 +35,5 @@ clean:
 	rm $(BIN)
 
 fmt:
-	gofmt -s -w -l .
+	go fmt .
 

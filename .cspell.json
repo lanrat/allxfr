@@ -6,11 +6,14 @@
     "words": [
         "allxfr",
         "AXFR",
+        "gofmt",
         "golangci",
+        "GOPROXY",
         "ixfr",
         "lanrat",
         "miekg",
         "publicsuffix",
+        "staticcheck",
         "weppos",
         "zonefile"
     ],
