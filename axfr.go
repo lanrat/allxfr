@@ -43,7 +43,7 @@ func axfrWorker(z zone.Zone, domain string) error {
 	var anySuccess bool
 	for _, nameserver := range z.NS[domain] {
 		for _, ip := range z.IP[nameserver] {
-			ipString := string(ip.To16())
+			ipString := ip.To16().String()
 			if !attemptedIPs[ipString] {
 				attemptedIPs[ipString] = true
 				anySuccess, err = axfrRetry(ip, domain, nameserver)
@@ -88,7 +88,7 @@ func axfrWorker(z zone.Zone, domain string) error {
 		}
 
 		for _, ip := range qIPs {
-			ipString := string(ip.To16())
+			ipString := ip.To16().String()
 			if !attemptedIPs[ipString] {
 				attemptedIPs[ipString] = true
 				v("[%s] trying non-glue AXFR: %s %s", domain, nameserver, ip.String())

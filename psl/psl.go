@@ -2,16 +2,30 @@
 package psl
 
 import (
+	"context"
 	"net/http"
+	"time"
 
 	"github.com/miekg/dns"
 	"github.com/weppos/publicsuffix-go/publicsuffix"
 )
 
-const pslURL = "https://publicsuffix.org/list/public_suffix_list.dat"
+const (
+	pslURL     = "https://publicsuffix.org/list/public_suffix_list.dat"
+	pslTimeout = 30 * time.Second
+)
 
 func GetDomains() ([]string, error) {
-	resp, err := http.Get(pslURL)
+	ctx, cancel := context.WithTimeout(context.Background(), pslTimeout)
+	defer cancel()
+	
+	req, err := http.NewRequestWithContext(ctx, "GET", pslURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	
+	client := &http.Client{Timeout: pslTimeout}
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}

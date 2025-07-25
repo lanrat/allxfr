@@ -162,7 +162,7 @@ func (f *File) Finish() error {
 			return err
 		}
 	}
-	if f.records > 1 {
+	if f.records > 0 {
 		err = os.Rename(f.filenameTmp, f.filename)
 	} else {
 		err = os.Remove(f.filenameTmp)

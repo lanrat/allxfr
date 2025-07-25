@@ -3,6 +3,7 @@
 package resolver
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"strconv"
@@ -599,11 +600,15 @@ func (r *Resolver) resolveNameservers(nsRecords []string, additional []dns.RR) [
 			wg.Add(1)
 			go func(hostname string) {
 				defer wg.Done()
-				ips, err := net.LookupIP(hostname)
+				ctx, cancel := context.WithTimeout(context.Background(), defaultQueryTimeout)
+				defer cancel()
+				
+				resolver := &net.Resolver{}
+				ips, err := resolver.LookupIPAddr(ctx, hostname)
 				if err == nil {
 					mu.Lock()
 					for _, ip := range ips {
-						nameservers = append(nameservers, net.JoinHostPort(ip.String(), "53"))
+						nameservers = append(nameservers, net.JoinHostPort(ip.IP.String(), "53"))
 					}
 					mu.Unlock()
 				}

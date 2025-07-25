@@ -44,11 +44,16 @@ type HealthResponse struct {
 
 // NewStatusServer creates a new status server instance
 func NewStatusServer() *StatusServer {
-	return &StatusServer{
+	s := &StatusServer{
 		startTime:    time.Now(),
 		totalZones:   0, // Will be updated as domains are discovered
 		recentFailed: make([]string, 0),
 	}
+	
+	// Start cleanup goroutine to prevent memory leaks from stale active entries
+	go s.cleanupStaleEntries()
+	
+	return s
 }
 
 // IncrementTotalZones increments the total zone count as domains are discovered
@@ -131,6 +136,40 @@ func (s *StatusServer) GetStatus() StatusResponse {
 		SuccessRate:  successRate,
 		TransferRate: transferRate,
 		RecentFailed: recentFailed,
+	}
+}
+
+// cleanupStaleEntries periodically removes entries from the active map that have been 
+// active for too long (likely due to missed FailTransfer/CompleteTransfer calls)
+func (s *StatusServer) cleanupStaleEntries() {
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+	
+	for range ticker.C {
+		now := time.Now()
+		staleThreshold := 10 * time.Minute // Consider entries stale after 10 minutes
+		
+		s.active.Range(func(key, value interface{}) bool {
+			if startTime, ok := value.(time.Time); ok {
+				if now.Sub(startTime) > staleThreshold {
+					// Remove stale entry and count it as failed
+					if _, exists := s.active.LoadAndDelete(key); exists {
+						atomic.AddUint32(&s.activeCount, ^uint32(0)) // decrement
+						atomic.AddUint32(&s.failed, 1)
+						
+						s.mu.Lock()
+						zone := key.(string)
+						failureEntry := zone + ": stale transfer (cleanup)"
+						s.recentFailed = append(s.recentFailed, failureEntry)
+						if len(s.recentFailed) > 10 {
+							s.recentFailed = s.recentFailed[1:]
+						}
+						s.mu.Unlock()
+					}
+				}
+			}
+			return true // continue iteration
+		})
 	}
 }
 

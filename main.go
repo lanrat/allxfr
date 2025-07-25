@@ -53,9 +53,6 @@ func main() {
 	if *retry < 1 {
 		log.Fatal("retry must be positive")
 	}
-	// if flag.NArg() > 0 {
-	// 	log.Fatalf("unexpected arguments %v", flag.Args())
-	// }
 
 	// Start HTTP status server if port is specified
 	if *statusPort != "" {
