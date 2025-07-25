@@ -3,6 +3,7 @@ package resolver
 import (
 	"fmt"
 	"net"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -38,6 +39,7 @@ var (
 
 type Resolver struct {
 	client dns.Client
+	cache  *dnsCache
 }
 
 type Result struct {
@@ -49,6 +51,10 @@ type Result struct {
 }
 
 func New() *Resolver {
+	return NewWithCacheSize(defaultCacheSize)
+}
+
+func NewWithCacheSize(cacheSize int) *Resolver {
 	return &Resolver{
 		client: dns.Client{
 			Timeout: queryTimeout,
@@ -56,6 +62,7 @@ func New() *Resolver {
 				Timeout: queryTimeout,
 			},
 		},
+		cache: newDNSCache(cacheSize),
 	}
 }
 
@@ -85,7 +92,59 @@ func resolveRootServers() []string {
 
 func (r *Resolver) Resolve(domain string, qtype uint16) (*Result, error) {
 	domain = dns.Fqdn(domain)
-	return r.resolveRecursive(domain, qtype, getRootServers(), 0)
+
+	cacheKey := r.makeCacheKey(domain, qtype)
+	if cached, found := r.cache.get(cacheKey); found {
+		return cached, nil
+	}
+
+	result, err := r.resolveRecursive(domain, qtype, getRootServers(), 0)
+	if err != nil {
+		return nil, err
+	}
+
+	if result != nil && result.Rcode == dns.RcodeSuccess {
+		ttl := r.calculateTTL(result)
+		if ttl > 0 {
+			r.cache.put(cacheKey, result, ttl)
+		}
+	}
+
+	return result, nil
+}
+
+func (r *Resolver) makeCacheKey(domain string, qtype uint16) string {
+	return domain + ":" + strconv.FormatUint(uint64(qtype), 10)
+}
+
+func (r *Resolver) calculateTTL(result *Result) time.Duration {
+	if result == nil {
+		return 0
+	}
+
+	minTTL := uint32(3600)
+
+	for _, rr := range result.Answer {
+		if rr.Header().Ttl < minTTL {
+			minTTL = rr.Header().Ttl
+		}
+	}
+
+	for _, rr := range result.Authority {
+		if rr.Header().Ttl < minTTL {
+			minTTL = rr.Header().Ttl
+		}
+	}
+
+	if minTTL == 3600 && len(result.Answer) == 0 && len(result.Authority) == 0 {
+		return 5 * time.Minute
+	}
+
+	if minTTL < 60 {
+		minTTL = 60
+	}
+
+	return time.Duration(minTTL) * time.Second
 }
 
 func (r *Resolver) resolveRecursive(domain string, qtype uint16, nameservers []string, depth int) (*Result, error) {
