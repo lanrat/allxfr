@@ -13,14 +13,15 @@ import (
 
 // File represents the zone file to create on disk
 type File struct {
-	filename    string
-	filenameTmp string
-	zone        string
-	bufWriter   *bufio.Writer
-	gzWriter    *gzip.Writer
-	fileWriter  *os.File
-	records     int64
-	closed      bool
+	filename      string
+	filenameTmp   string
+	zone          string
+	bufWriter     *bufio.Writer
+	gzWriter      *gzip.Writer
+	fileWriter    *os.File
+	records       int64
+	closed        bool
+	pendingWrites []string // Buffer comments until first record is added
 }
 
 // New returns a handle to a new zonefile
@@ -39,11 +40,16 @@ func (f *File) Records() int64 {
 
 // WriteComment adds a comment to the zone file
 func (f *File) WriteComment(comment string) error {
-	err := f.fileReady()
-	if err != nil {
-		return err
+	if f.closed {
+		return ErrFileClosed
 	}
-	_, err = fmt.Fprintf(f.bufWriter, "; %s", comment)
+	// If file isn't created yet, buffer the comment
+	if f.bufWriter == nil {
+		f.pendingWrites = append(f.pendingWrites, fmt.Sprintf("; %s", comment))
+		return nil
+	}
+	// File is already created, write directly
+	_, err := fmt.Fprintf(f.bufWriter, "; %s", comment)
 	return err
 }
 
@@ -71,15 +77,26 @@ func (f *File) fileReady() error {
 		f.gzWriter.ModTime = time.Now()
 		f.gzWriter.Name = fmt.Sprintf("%s.zone", f.zone[:len(f.zone)-1])
 		f.bufWriter = bufio.NewWriter(f.gzWriter)
-		// Save metadata to zone file as comment
-		err = f.WriteCommentKey("timestamp", time.Now().Format(time.RFC3339))
+
+		// Write timestamp and zone metadata
+		_, err = fmt.Fprintf(f.bufWriter, "; timestamp: %s\n", time.Now().Format(time.RFC3339))
 		if err != nil {
 			return err
 		}
-		err = f.WriteCommentKey("zone", f.zone)
+		_, err = fmt.Fprintf(f.bufWriter, "; zone: %s\n", f.zone)
 		if err != nil {
 			return err
 		}
+
+		// Write all buffered comments
+		for _, comment := range f.pendingWrites {
+			_, err = fmt.Fprintf(f.bufWriter, "%s", comment)
+			if err != nil {
+				return err
+			}
+		}
+		// Clear the buffer
+		f.pendingWrites = nil
 	}
 	return nil
 }
@@ -111,6 +128,13 @@ func (f *File) Finish() error {
 	if f.closed {
 		return nil
 	}
+
+	// If no file was created (no records were added), just mark as closed
+	if f.bufWriter == nil {
+		f.closed = true
+		return nil
+	}
+
 	// function to finish/close/safe the files when done
 	if f.records > 1 {
 		// save record count comment at end of zone file

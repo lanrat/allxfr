@@ -149,7 +149,6 @@ func axfrToFile(zone string, ip net.IP, nameserver string) (int64, error) {
 	}
 
 	var envelope int64
-	v("saving zone %q to file %s", zone, filename)
 	zonefile := save.New(zone, filename)
 	defer func() {
 		err = zonefile.WriteCommentKey("envelopes", fmt.Sprintf("%d", envelope))
