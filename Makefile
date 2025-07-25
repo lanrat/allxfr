@@ -32,7 +32,7 @@ deps: go.mod
 	go mod download
 
 test:
-	go test -timeout 60s -v ./...
+	go test -timeout 15s -v ./...
 
 clean:
 	rm $(BIN)

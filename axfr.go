@@ -15,7 +15,7 @@ import (
 	"github.com/miekg/dns"
 )
 
-// axfrWorker iterate through all possabilities and queries attempting an AXFR
+// axfrWorker iterate through all possibilities and queries attempting an AXFR
 func axfrWorker(z zone.Zone, domain string) error {
 	ips := make(map[string]bool)
 	domain = dns.Fqdn(domain)
@@ -48,11 +48,28 @@ func axfrWorker(z zone.Zone, domain string) error {
 			}
 		}
 	}
-	if len(*ns) > 0 {
-		// query NS and run axfr on missing IPs
-		var qNameservers []string
+
+	// query NS and run axfr on missing IPs
+	var qNameservers []string
+	for try := 0; try < *retry; try++ {
+		result, err := query.ResolveAll(domain, dns.TypeNS)
+		if err != nil {
+			v("[%s] %s", domain, err)
+		} else {
+			for _, rr := range result.Answer {
+				if ns, ok := rr.(*dns.NS); ok {
+					qNameservers = append(qNameservers, ns.Ns)
+				}
+			}
+			break
+		}
+		time.Sleep(1 * time.Second)
+	}
+
+	for _, nameserver := range qNameservers {
+		var qIPs []net.IP
 		for try := 0; try < *retry; try++ {
-			qNameservers, err = queryNS(localNameserver, domain)
+			qIPs, err = query.LookupIPAll(nameserver)
 			if err != nil {
 				v("[%s] %s", domain, err)
 			} else {
@@ -61,51 +78,39 @@ func axfrWorker(z zone.Zone, domain string) error {
 			time.Sleep(1 * time.Second)
 		}
 
-		for _, nameserver := range qNameservers {
-			var qIPs []net.IP
-			for try := 0; try < *retry; try++ {
-				qIPs, err = queryIP(localNameserver, nameserver)
-				if err != nil {
-					v("[%s] %s", domain, err)
-				} else {
-					break
-				}
-				time.Sleep(1 * time.Second)
-			}
-
-			for _, ip := range qIPs {
-				ipString := string(ip.To16())
-				if !ips[ipString] {
-					ips[ipString] = true
-					for try := 0; try < *retry; try++ {
-						v("[%s] trying AXFR: %s %s", domain, nameserver, ip.String())
-						records, err = axfr(domain, nameserver, ip)
-						if err != nil {
-							v("[%s] %s", domain, err)
-						} else {
-							if records != 0 {
-								anySuccess = true
-								break
-							}
-						}
-						time.Sleep(1 * time.Second)
-					}
-					if !*saveAll && records != 0 {
-						return nil
-					}
+		for _, ip := range qIPs {
+			ipString := string(ip.To16())
+			if !ips[ipString] {
+				ips[ipString] = true
+				for try := 0; try < *retry; try++ {
+					v("[%s] trying AXFR: %s %s", domain, nameserver, ip.String())
+					records, err = axfr(domain, nameserver, ip)
 					if err != nil {
-						return err
+						v("[%s] %s", domain, err)
+					} else {
+						if records != 0 {
+							anySuccess = true
+							break
+						}
 					}
+					time.Sleep(1 * time.Second)
+				}
+				if !*saveAll && records != 0 {
+					return nil
+				}
+				if err != nil {
+					return err
 				}
 			}
 		}
+
 	}
-	
+
 	// If no successful transfers occurred, mark domain as failed
 	if !anySuccess && statusServer != nil {
 		statusServer.FailTransfer(domain, "no successful zone transfers")
 	}
-	
+
 	return nil
 }
 
@@ -116,7 +121,7 @@ func axfr(domain, nameserver string, ip net.IP) (int64, error) {
 		took := time.Since(startTime).Round(time.Millisecond)
 		log.Printf("[%s] %s (%s) xfr size: %d records in %s\n", domain, nameserver, ip.String(), records, took.String())
 		atomic.AddUint32(&totalXFR, 1)
-		
+
 		// Update status server on successful transfer
 		if statusServer != nil {
 			statusServer.CompleteTransfer(domain)

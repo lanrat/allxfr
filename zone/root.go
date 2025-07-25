@@ -6,28 +6,6 @@ import (
 	"github.com/miekg/dns"
 )
 
-// GetRootServers returns the DNS root servers
-func GetRootServers(nameserver string) ([]string, error) {
-	out := make([]string, 0, 4)
-	// get root servers
-	m := new(dns.Msg)
-	m.SetQuestion(".", dns.TypeNS)
-	in, err := dns.Exchange(m, nameserver)
-	if err != nil {
-		return out, err
-	}
-	for _, a := range in.Answer {
-		if ns, ok := a.(*dns.NS); ok {
-			out = append(out, ns.Ns)
-		}
-	}
-	if len(out) == 0 {
-		return out, fmt.Errorf("unable to find root server")
-
-	}
-	return out, nil
-}
-
 // RootAXFR returns a Zone containing the ROOT zone
 func RootAXFR(ns string) (Zone, error) {
 	m := new(dns.Msg)

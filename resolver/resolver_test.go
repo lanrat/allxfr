@@ -325,12 +325,135 @@ func TestResolverResolveAll(t *testing.T) {
 			}
 
 			if len(allIPs) < len(normalIPs) {
-				t.Fatalf("ResolveAll returned fewer IPs (%d) than Resolve (%d) for %s", 
+				t.Fatalf("ResolveAll returned fewer IPs (%d) than Resolve (%d) for %s",
 					len(allIPs), len(normalIPs), domain)
 			}
 
 			t.Logf("ResolveAll found %d A records for %s", len(allIPs), domain)
 			t.Logf("Resolve found %d A records for %s", len(normalIPs), domain)
+		})
+	}
+}
+
+func TestResolverLookupIP(t *testing.T) {
+	resolver := New()
+	testDomains := []string{
+		"google.com",
+		"github.com",
+		"cloudflare.com",
+	}
+
+	for _, domain := range testDomains {
+		t.Run(domain, func(t *testing.T) {
+			resolverIPs, err := resolver.LookupIP(domain)
+			if err != nil {
+				t.Fatalf("Failed to lookup IP for %s: %v", domain, err)
+			}
+
+			if len(resolverIPs) == 0 {
+				t.Fatalf("No IP addresses found for %s", domain)
+			}
+
+			systemIPs, err := net.LookupIP(domain)
+			if err != nil {
+				t.Fatalf("System lookup failed for %s: %v", domain, err)
+			}
+
+			if len(systemIPs) == 0 {
+				t.Fatalf("No IP addresses from system resolver for %s", domain)
+			}
+
+			var resolverIPv4, resolverIPv6 []net.IP
+			for _, ip := range resolverIPs {
+				if ip.To4() != nil {
+					resolverIPv4 = append(resolverIPv4, ip)
+				} else if ip.To16() != nil {
+					resolverIPv6 = append(resolverIPv6, ip)
+				}
+			}
+
+			var systemIPv4, systemIPv6 []net.IP
+			for _, ip := range systemIPs {
+				if ip.To4() != nil {
+					systemIPv4 = append(systemIPv4, ip)
+				} else if ip.To16() != nil {
+					systemIPv6 = append(systemIPv6, ip)
+				}
+			}
+
+			t.Logf("Resolver found %d IPv4 and %d IPv6 addresses for %s",
+				len(resolverIPv4), len(resolverIPv6), domain)
+			t.Logf("System found %d IPv4 and %d IPv6 addresses for %s",
+				len(systemIPv4), len(systemIPv6), domain)
+
+			if len(resolverIPv4) == 0 && len(systemIPv4) > 0 {
+				t.Errorf("Resolver found no IPv4 addresses but system found %d for %s",
+					len(systemIPv4), domain)
+			}
+		})
+	}
+}
+
+func TestResolverLookupIPAll(t *testing.T) {
+	resolver := New()
+	testDomains := []string{
+		"google.com",
+		"github.com",
+		"cloudflare.com",
+	}
+
+	for _, domain := range testDomains {
+		t.Run(domain, func(t *testing.T) {
+			allIPs, err := resolver.LookupIPAll(domain)
+			if err != nil {
+				t.Fatalf("Failed to lookup IP with LookupIPAll for %s: %v", domain, err)
+			}
+
+			normalIPs, err := resolver.LookupIP(domain)
+			if err != nil {
+				t.Fatalf("Failed to lookup IP with LookupIP for %s: %v", domain, err)
+			}
+
+			if len(allIPs) == 0 {
+				t.Fatalf("No IP addresses found with LookupIPAll for %s", domain)
+			}
+
+			if len(normalIPs) == 0 {
+				t.Fatalf("No IP addresses found with LookupIP for %s", domain)
+			}
+
+			var allIPv4, allIPv6 []net.IP
+			for _, ip := range allIPs {
+				if ip.To4() != nil {
+					allIPv4 = append(allIPv4, ip)
+				} else if ip.To16() != nil {
+					allIPv6 = append(allIPv6, ip)
+				}
+			}
+
+			var normalIPv4, normalIPv6 []net.IP
+			for _, ip := range normalIPs {
+				if ip.To4() != nil {
+					normalIPv4 = append(normalIPv4, ip)
+				} else if ip.To16() != nil {
+					normalIPv6 = append(normalIPv6, ip)
+				}
+			}
+
+			if len(allIPv4) < len(normalIPv4) {
+				t.Fatalf("LookupIPAll returned fewer IPv4 addresses (%d) than LookupIP (%d) for %s",
+					len(allIPv4), len(normalIPv4), domain)
+			}
+
+			if len(allIPv6) < len(normalIPv6) {
+				t.Fatalf("LookupIPAll returned fewer IPv6 addresses (%d) than LookupIP (%d) for %s",
+					len(allIPv6), len(normalIPv6), domain)
+			}
+
+			t.Logf("LookupIPAll found %d IPv4 and %d IPv6 addresses for %s",
+				len(allIPv4), len(allIPv6), domain)
+			t.Logf("LookupIP found %d IPv4 and %d IPv6 addresses for %s",
+				len(normalIPv4), len(normalIPv6), domain)
 		})
 	}
 }
