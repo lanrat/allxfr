@@ -71,6 +71,8 @@ Usage of ./allxfr:
         number of times to retry failed operations (default 3)
   -save-all
         attempt AXFR from every nameserver for a given zone and save all answers
+  -status-port string
+        enable HTTP status server on specified port (e.g., '8080')
   -verbose
         enable verbose output
   -zonefile string

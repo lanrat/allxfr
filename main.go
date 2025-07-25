@@ -18,17 +18,18 @@ import (
 )
 
 var (
-	parallel  = flag.Uint("parallel", 10, "number of parallel zone transfers to perform")
-	saveDir   = flag.String("out", "zones", "directory to save found zones in")
-	verbose   = flag.Bool("verbose", false, "enable verbose output")
-	zonefile  = flag.String("zonefile", "", "use the provided zonefile instead of getting the root zonefile")
-	ns        = flag.String("ns", "", "nameserver to use for manually querying of records not in zone file")
-	saveAll   = flag.Bool("save-all", false, "attempt AXFR from every nameserver for a given zone and save all answers")
-	usePSL    = flag.Bool("psl", false, "attempt AXFR from zones listed in the public suffix list, requires -ns flag")
-	ixfr      = flag.Bool("ixfr", false, "attempt an IXFR instead of AXFR")
-	dryRun    = flag.Bool("dry-run", false, "only test if xfr is allowed by retrieving one envelope")
-	retry     = flag.Int("retry", 3, "number of times to retry failed operations")
-	overwrite = flag.Bool("overwrite", false, "if zone already exists on disk, overwrite it with newer data")
+	parallel   = flag.Uint("parallel", 10, "number of parallel zone transfers to perform")
+	saveDir    = flag.String("out", "zones", "directory to save found zones in")
+	verbose    = flag.Bool("verbose", false, "enable verbose output")
+	zonefile   = flag.String("zonefile", "", "use the provided zonefile instead of getting the root zonefile")
+	ns         = flag.String("ns", "", "nameserver to use for manually querying of records not in zone file")
+	saveAll    = flag.Bool("save-all", false, "attempt AXFR from every nameserver for a given zone and save all answers")
+	usePSL     = flag.Bool("psl", false, "attempt AXFR from zones listed in the public suffix list, requires -ns flag")
+	ixfr       = flag.Bool("ixfr", false, "attempt an IXFR instead of AXFR")
+	dryRun     = flag.Bool("dry-run", false, "only test if xfr is allowed by retrieving one envelope")
+	retry      = flag.Int("retry", 3, "number of times to retry failed operations")
+	overwrite  = flag.Bool("overwrite", false, "if zone already exists on disk, overwrite it with newer data")
+	statusPort = flag.String("status-port", "", "enable HTTP status server on specified port (e.g., '8080')")
 )
 
 var (
@@ -52,6 +53,12 @@ func main() {
 	if flag.NArg() > 0 {
 		log.Fatalf("unexpected arguments %v", flag.Args())
 	}
+
+	// Start HTTP status server if port is specified
+	if *statusPort != "" {
+		StartStatusServer(*statusPort)
+	}
+
 	var err error
 	localNameserver, err = getNameserver()
 	check(err)
@@ -94,7 +101,11 @@ func main() {
 		v("added %d domains from PSL\n", len(pslDomains))
 	}
 
-	// create outpout dir if does not exist
+	if statusServer != nil {
+		statusServer.IncrementTotalZones(uint32(z.CountNS()))
+	}
+
+	// create output dir if does not exist
 	if !*dryRun {
 		if _, err := os.Stat(*saveDir); os.IsNotExist(err) {
 			err = os.MkdirAll(*saveDir, os.ModePerm)
@@ -127,10 +138,22 @@ func worker(z zone.Zone, c chan string) error {
 		if !more {
 			return nil
 		}
+
+		// Update status server with new domain discovered
+		if statusServer != nil {
+			statusServer.StartTransfer(domain)
+		}
+
 		err := axfrWorker(z, domain)
 		if err != nil {
+			if statusServer != nil {
+				statusServer.FailTransfer(domain, err.Error())
+			}
 			return err
 		}
+
+		// If no error occurred, the domain processing is complete
+		// Success/failure status is handled within axfr function based on actual transfers
 	}
 }
 

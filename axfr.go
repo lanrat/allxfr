@@ -21,6 +21,7 @@ func axfrWorker(z zone.Zone, domain string) error {
 	domain = dns.Fqdn(domain)
 	var err error
 	var records int64
+	var anySuccess bool
 	for _, nameserver := range z.NS[domain] {
 		for _, ip := range z.IP[nameserver] {
 			ipString := string(ip.To16())
@@ -32,6 +33,7 @@ func axfrWorker(z zone.Zone, domain string) error {
 						v("[%s] %s", domain, err)
 					} else {
 						if records != 0 {
+							anySuccess = true
 							break
 						}
 					}
@@ -82,6 +84,7 @@ func axfrWorker(z zone.Zone, domain string) error {
 							v("[%s] %s", domain, err)
 						} else {
 							if records != 0 {
+								anySuccess = true
 								break
 							}
 						}
@@ -97,6 +100,12 @@ func axfrWorker(z zone.Zone, domain string) error {
 			}
 		}
 	}
+	
+	// If no successful transfers occurred, mark domain as failed
+	if !anySuccess && statusServer != nil {
+		statusServer.FailTransfer(domain, "no successful zone transfers")
+	}
+	
 	return nil
 }
 
@@ -107,6 +116,11 @@ func axfr(domain, nameserver string, ip net.IP) (int64, error) {
 		took := time.Since(startTime).Round(time.Millisecond)
 		log.Printf("[%s] %s (%s) xfr size: %d records in %s\n", domain, nameserver, ip.String(), records, took.String())
 		atomic.AddUint32(&totalXFR, 1)
+		
+		// Update status server on successful transfer
+		if statusServer != nil {
+			statusServer.CompleteTransfer(domain)
+		}
 	}
 	return records, err
 }

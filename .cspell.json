@@ -6,6 +6,7 @@
     "words": [
         "allxfr",
         "AXFR",
+        "errgroup",
         "gofmt",
         "golangci",
         "GOPROXY",
