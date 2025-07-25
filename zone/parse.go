@@ -10,7 +10,9 @@ import (
 	"github.com/miekg/dns"
 )
 
-// ParseZoneFile parses the provided zonefile into a Zone
+// ParseZoneFile parses a DNS zone file and returns a Zone containing the records.
+// It supports both plain text and gzip-compressed zone files (detected by .gz extension).
+// The function extracts NS, A, and AAAA records to build the zone structure.
 func ParseZoneFile(filename string) (Zone, error) {
 	var z Zone
 	var fileReader io.Reader

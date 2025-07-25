@@ -1,3 +1,8 @@
+// Package status provides HTTP endpoints and tracking for DNS zone transfer operations.
+// It maintains real-time statistics about transfer progress, success/failure rates,
+// and active transfers, while also providing a cleanup mechanism to prevent memory
+// leaks from stale transfer entries. The package exposes JSON APIs for monitoring
+// the ALLXFR application's performance and progress.
 package status
 
 import (

@@ -1,3 +1,7 @@
+// Package save provides functionality for writing DNS zone files to disk with compression.
+// It handles the creation, writing, and finalization of zone files, including
+// automatic gzip compression, metadata comments, and atomic file operations
+// to ensure data integrity during the zone transfer process.
 package save
 
 import (
@@ -11,20 +15,23 @@ import (
 	"github.com/miekg/dns"
 )
 
-// File represents the zone file to create on disk
+// File represents a zone file being written to disk with compression.
+// It manages the lifecycle of creating, writing, and finalizing DNS zone files.
 type File struct {
-	filename      string
-	filenameTmp   string
-	zone          string
-	bufWriter     *bufio.Writer
-	gzWriter      *gzip.Writer
-	fileWriter    *os.File
-	records       int64
-	closed        bool
-	pendingWrites []string // Buffer comments until first record is added
+	filename      string        // Final filename for the zone file
+	filenameTmp   string        // Temporary filename during writing
+	zone          string        // Zone name being written
+	bufWriter     *bufio.Writer // Buffered writer for performance
+	gzWriter      *gzip.Writer  // Gzip compression writer
+	fileWriter    *os.File      // Underlying file writer
+	records       int64         // Number of DNS records written
+	closed        bool          // Whether the file has been finalized
+	pendingWrites []string      // Comments buffered until first record is added
 }
 
-// New returns a handle to a new zonefile
+// New creates a new zone file writer for the specified zone and filename.
+// The file is not created until the first record is written, allowing
+// comments to be buffered efficiently.
 func New(zone, filename string) *File {
 	f := new(File)
 	f.filename = filename
@@ -33,7 +40,7 @@ func New(zone, filename string) *File {
 	return f
 }
 
-// Records returns the number of records written to the zone file
+// Records returns the number of DNS records written to the zone file.
 func (f *File) Records() int64 {
 	return f.records
 }
@@ -53,16 +60,18 @@ func (f *File) WriteComment(comment string) error {
 	return err
 }
 
-// WriteCommentKey adds a comment to the zone file
+// WriteCommentKey writes a key-value comment pair to the zone file.
+// The comment is formatted as "; key: value\n".
 func (f *File) WriteCommentKey(key, value string) error {
 	return f.WriteComment(fmt.Sprintf("%s: %s\n", key, value))
 }
 
-// ErrFileClosed returned when attempting to write to a closed file
+// ErrFileClosed is returned when attempting to write to a file that has been closed.
 var ErrFileClosed = errors.New("file is already closed")
 
-// fileReady internal function to ensure that the file is ready before data can be written
-// safe to call multiple times
+// fileReady ensures the file is created and ready for writing.
+// It creates the temporary file, sets up compression, and writes initial metadata.
+// This function is safe to call multiple times.
 func (f *File) fileReady() error {
 	var err error
 	if f.closed {
@@ -109,7 +118,7 @@ func (f *File) AddRR(rr dns.RR) error {
 		return err
 	}
 
-	_, err = fmt.Fprintf(f.bufWriter, "%s\n", RRString(rr))
+	_, err = fmt.Fprintf(f.bufWriter, "%s\n", rr.String())
 	if err != nil {
 		return err
 	}
@@ -117,7 +126,8 @@ func (f *File) AddRR(rr dns.RR) error {
 	return nil
 }
 
-// Abort stops processing the new zone file and removes it from disk
+// Abort cancels the zone file creation and removes any temporary files.
+// It sets the record count to 0 to ensure the file is deleted rather than saved.
 func (f *File) Abort() error {
 	f.records = 0 // forces finish to remove the file
 	return f.Finish()

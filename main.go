@@ -1,3 +1,6 @@
+// Package main implements ALLXFR, a tool that performs DNS zone transfers (AXFR)
+// against root zone servers and attempts opportunistic zone transfers for every
+// nameserver IP to discover publicly available zone data.
 package main
 
 import (
@@ -44,6 +47,10 @@ const (
 	globalTimeout = 15 * time.Second
 )
 
+// main is the entry point for the ALLXFR application.
+// It parses command-line flags, initializes the resolver and status server,
+// obtains zone data (from root AXFR, zonefile, or PSL), and orchestrates
+// parallel zone transfer attempts across all discovered nameservers.
 func main() {
 	flag.Parse()
 	if *showVersion {
@@ -134,6 +141,9 @@ func main() {
 	v("exiting normally\n")
 }
 
+// worker processes domains from the channel and attempts zone transfers.
+// It receives domain names from the channel and calls axfrWorker to attempt
+// zone transfers for each domain. Updates the status server with transfer progress.
 func worker(z zone.Zone, c chan string) error {
 	for {
 		domain, more := <-c
@@ -159,12 +169,16 @@ func worker(z zone.Zone, c chan string) error {
 	}
 }
 
+// check is a utility function that terminates the program with log.Fatal
+// if the provided error is not nil. Used for handling critical errors.
 func check(err error) {
 	if err != nil {
 		log.Fatal(err)
 	}
 }
 
+// v prints verbose output if the verbose flag is enabled.
+// It formats the message and prefixes each line with a tab for indentation.
 func v(format string, v ...interface{}) {
 	if *verbose {
 		line := fmt.Sprintf(format, v...)

@@ -102,6 +102,8 @@ func NewWithCacheSize(cacheSize int, timeout time.Duration) *Resolver {
 	}
 }
 
+// getRootServers returns the cached list of root server IP addresses.
+// It uses sync.Once to ensure root servers are resolved only once per program execution.
 func getRootServers() []string {
 	rootServersOnce.Do(func() {
 		rootServers = resolveRootServers()
@@ -109,6 +111,9 @@ func getRootServers() []string {
 	return rootServers
 }
 
+// resolveRootServers resolves all root server hostnames to IP addresses in parallel.
+// It looks up both IPv4 and IPv6 addresses for each root server and returns
+// them as "ip:port" strings ready for DNS queries.
 func resolveRootServers() []string {
 	var servers []string
 	var mu sync.Mutex
@@ -620,8 +625,9 @@ func (r *Resolver) resolveNameservers(nsRecords []string, additional []dns.RR) [
 	return nameservers
 }
 
-// mergeResults combines multiple Result structs into a single Result,
-// deduplicating records and using the best available Rcode and Authoritative status.
+// mergeResults combines multiple DNS query results into a single Result.
+// It deduplicates resource records and selects the best Rcode and Authoritative status.
+// Used by ResolveAll to combine responses from multiple nameservers.
 func mergeResults(results []*Result) *Result {
 	if len(results) == 0 {
 		return nil

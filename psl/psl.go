@@ -15,6 +15,10 @@ const (
 	pslTimeout = 30 * time.Second
 )
 
+// GetDomains fetches and parses the Public Suffix List to extract domain names.
+// It downloads the PSL from publicsuffix.org, parses the rules (excluding private domains),
+// converts IDN domains to ASCII, and returns them as fully qualified domain names.
+// The function includes timeout handling to prevent indefinite blocking.
 func GetDomains() ([]string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), pslTimeout)
 	defer cancel()

@@ -6,7 +6,9 @@ import (
 	"github.com/miekg/dns"
 )
 
-// RootAXFR returns a Zone containing the ROOT zone
+// RootAXFR performs a zone transfer against a root nameserver to obtain the root zone.
+// It connects to the specified nameserver on port 53 and requests the root zone (".").
+// Returns a Zone containing all the NS, A, and AAAA records from the root zone.
 func RootAXFR(ns string) (Zone, error) {
 	m := new(dns.Msg)
 	m.SetQuestion(".", dns.TypeAXFR)

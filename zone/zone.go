@@ -8,17 +8,21 @@ import (
 	"github.com/miekg/dns"
 )
 
-// Zone contains the nameservers and nameserver IPs in a zone
+// Zone contains the nameservers and nameserver IPs in a zone.
+// It maintains mappings between domain names and their nameservers,
+// as well as nameserver hostnames to their IP addresses.
 type Zone struct {
-	// map of names to nameservers
+	// NS maps domain names to their authoritative nameservers
 	NS map[string][]string
-	// map of nameservers to ipv4 and ipv6
+	// IP maps nameserver hostnames to their IPv4 and IPv6 addresses
 	IP map[string][]net.IP
-	// number of records added to the zone
+	// Records tracks the total number of records added to the zone
 	Records int64
 }
 
-// AddRecord adds NS, A, AAAA records to the zone
+// AddRecord adds NS, A, and AAAA records to the zone.
+// It extracts nameserver and IP information from DNS resource records
+// and updates the zone's internal mappings accordingly.
 func (z *Zone) AddRecord(r dns.RR) {
 	switch t := r.(type) {
 	case *dns.A:
@@ -30,7 +34,9 @@ func (z *Zone) AddRecord(r dns.RR) {
 	}
 }
 
-// GetNameChan returns a channel of domains in the zone
+// GetNameChan returns a channel that yields all domain names in the zone.
+// It skips the root zone (".") and .arpa domains as they are not suitable
+// for zone transfer attempts. The channel is closed when all domains are sent.
 func (z *Zone) GetNameChan() chan string {
 	out := make(chan string)
 	go func() {
@@ -49,12 +55,14 @@ func (z *Zone) GetNameChan() chan string {
 	return out
 }
 
-// CountNS returns the number of nameservers in the zone
+// CountNS returns the number of unique domain names that have nameservers in the zone.
 func (z *Zone) CountNS() int {
 	return len(z.NS)
 }
 
-// AddNS adds a domain nameserver pair to the zone
+// AddNS adds a nameserver for a domain to the zone.
+// Domain names are normalized to lowercase. If nameserver is empty,
+// only the domain entry is created without adding a nameserver.
 func (z *Zone) AddNS(domain, nameserver string) {
 	domain = strings.ToLower(domain)
 	if z.NS == nil {
@@ -71,7 +79,9 @@ func (z *Zone) AddNS(domain, nameserver string) {
 	}
 }
 
-// AddIP adds a nameserver IP pair to the zone
+// AddIP adds an IP address for a nameserver to the zone.
+// Nameserver names are normalized to lowercase. Both IPv4 and IPv6
+// addresses are supported and stored in the same slice.
 func (z *Zone) AddIP(nameserver string, ip net.IP) {
 	nameserver = strings.ToLower(nameserver)
 	if z.IP == nil {
@@ -85,7 +95,9 @@ func (z *Zone) AddIP(nameserver string, ip net.IP) {
 	z.Records++
 }
 
-// Print prints the zone to stdout
+// Print outputs the zone structure to stdout in a simple format.
+// It displays all domains with their nameservers, followed by
+// all nameservers with their IP addresses.
 func (z *Zone) Print() {
 	fmt.Println("NS:")
 	for zone := range z.NS {
@@ -103,7 +115,9 @@ func (z *Zone) Print() {
 	}
 }
 
-// PrintTree prints the zone in tree format to stdout
+// PrintTree outputs the zone structure to stdout in a hierarchical tree format.
+// It shows domains, their nameservers, and the IP addresses for each nameserver
+// in an indented tree structure for better readability.
 func (z *Zone) PrintTree() {
 	fmt.Println("Zones:")
 	for zone := range z.NS {

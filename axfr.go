@@ -16,8 +16,13 @@ import (
 	"github.com/miekg/dns"
 )
 
+// ErrAxfrUnsupported indicates that the nameserver does not support AXFR requests.
+// This is a common response when zone transfers are disabled on the server.
 var ErrAxfrUnsupported = errors.New("AXFR Unsupported")
 
+// ErrorAxfrUnsupportedWrap wraps DNS errors with ErrAxfrUnsupported when
+// the error indicates that AXFR is refused or not authorized.
+// It specifically handles DNS response codes 5 (Refused) and 9 (Not Authorized).
 func ErrorAxfrUnsupportedWrap(err error) error {
 	if err == nil {
 		return nil
@@ -34,7 +39,9 @@ func ErrorAxfrUnsupportedWrap(err error) error {
 	return err
 }
 
-// axfrWorker iterate through all possibilities and queries attempting an AXFR
+// axfrWorker attempts zone transfers for a domain using all available nameservers and IPs.
+// It tries both glue records from the zone data and performs additional NS queries
+// to discover non-glue nameserver IPs. Returns nil if any transfer succeeds.
 func axfrWorker(z zone.Zone, domain string) error {
 	attemptedIPs := make(map[string]bool)
 	domain = dns.Fqdn(domain)
@@ -112,6 +119,10 @@ func axfrWorker(z zone.Zone, domain string) error {
 	return nil
 }
 
+// axfrRetry attempts a zone transfer with retry logic.
+// It retries failed transfers up to the configured retry count, but skips
+// retries if the nameserver explicitly doesn't support AXFR.
+// Returns (success, error) where success indicates if any records were transferred.
 func axfrRetry(ip net.IP, domain, nameserver string) (bool, error) {
 	var err error
 	var records int64
@@ -145,6 +156,10 @@ func axfrRetry(ip net.IP, domain, nameserver string) (bool, error) {
 	return anySuccess, err
 }
 
+// axfr performs a single zone transfer attempt and logs the result.
+// It calls axfrToFile to perform the actual transfer and updates global
+// transfer statistics and status server on success.
+// Returns the number of records transferred.
 func axfr(domain, nameserver string, ip net.IP) (int64, error) {
 	startTime := time.Now()
 	records, err := axfrToFile(domain, ip, nameserver)
@@ -161,7 +176,10 @@ func axfr(domain, nameserver string, ip net.IP) (int64, error) {
 	return records, err
 }
 
-// returns -1 if zone already exists and we are not overwriting
+// axfrToFile performs an AXFR or IXFR request and saves the results to a compressed file.
+// It handles file creation, DNS transfer setup with timeouts, and processes each
+// envelope of records. Returns the number of records transferred or -1 if the file
+// already exists and overwrite is disabled.
 func axfrToFile(zone string, ip net.IP, nameserver string) (int64, error) {
 	zone = dns.Fqdn(zone)
 
