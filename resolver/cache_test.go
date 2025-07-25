@@ -9,7 +9,7 @@ import (
 )
 
 func TestCacheBasicFunctionality(t *testing.T) {
-	resolver := NewWithCacheSize(10)
+	resolver := NewWithCacheSize(10, defaultQueryTimeout)
 	domain := "google.com"
 
 	result1, err := resolver.Resolve(domain, dns.TypeA)

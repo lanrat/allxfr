@@ -4,16 +4,15 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"net"
 	"os"
 	"strings"
 	"time"
 
+	"github.com/lanrat/allxfr/resolver"
 	"github.com/lanrat/allxfr/zone"
 
 	"github.com/lanrat/allxfr/psl"
 
-	"github.com/miekg/dns"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -22,7 +21,6 @@ var (
 	saveDir   = flag.String("out", "zones", "directory to save found zones in")
 	verbose   = flag.Bool("verbose", false, "enable verbose output")
 	zonefile  = flag.String("zonefile", "", "use the provided zonefile instead of getting the root zonefile")
-	ns        = flag.String("ns", "", "nameserver to use for manually querying of records not in zone file")
 	saveAll   = flag.Bool("save-all", false, "attempt AXFR from every nameserver for a given zone and save all answers")
 	usePSL    = flag.Bool("psl", false, "attempt AXFR from zones listed in the public suffix list, requires -ns flag")
 	ixfr      = flag.Bool("ixfr", false, "attempt an IXFR instead of AXFR")
@@ -32,8 +30,8 @@ var (
 )
 
 var (
-	localNameserver string
-	totalXFR        uint32
+	totalXFR uint32
+	query    resolver.Resolver
 )
 
 const (
@@ -41,30 +39,22 @@ const (
 )
 
 func main() {
-	//log.SetFlags(0)
 	flag.Parse()
-	if *usePSL && len(*ns) == 0 {
-		log.Fatal("must pass nameserver with -ns when using -psl")
-	}
 	if *retry < 1 {
 		log.Fatal("retry must be positive")
 	}
 	if flag.NArg() > 0 {
 		log.Fatalf("unexpected arguments %v", flag.Args())
 	}
-	var err error
-	localNameserver, err = getNameserver()
-	check(err)
-	v("using initial nameserver %s", localNameserver)
+	query = *resolver.NewWithTimeout(globalTimeout)
 
 	start := time.Now()
 	var z zone.Zone
+	var err error
 	if len(*zonefile) == 0 {
-		rootNameservers, err := zone.GetRootServers(localNameserver)
-		check(err)
 		// get zone file from root AXFR
 		// not all the root nameservers allow AXFR, try them until we find one that does
-		for _, ns := range rootNameservers {
+		for _, ns := range resolver.RootServerNames {
 			v("trying root nameserver %s", ns)
 			startTime := time.Now()
 			z, err = zone.RootAXFR(ns)
@@ -146,25 +136,4 @@ func v(format string, v ...interface{}) {
 		lines := strings.ReplaceAll(line, "\n", "\n\t")
 		log.Print(lines)
 	}
-}
-
-// getNameserver returns the nameserver passed via flag if provided, if not returns the system's NS
-func getNameserver() (string, error) {
-	var server string
-	if len(*ns) == 0 {
-		// get root server from local DNS
-		conf, err := dns.ClientConfigFromFile("/etc/resolv.conf")
-		if err != nil {
-			return "", err
-		}
-		server = net.JoinHostPort(conf.Servers[0], conf.Port)
-	} else {
-		host, port, err := net.SplitHostPort(*ns)
-		if err != nil {
-			server = net.JoinHostPort(*ns, "53")
-		} else {
-			server = net.JoinHostPort(host, port)
-		}
-	}
-	return server, nil
 }

@@ -14,11 +14,13 @@ import (
 )
 
 const (
-	maxRecursionDepth = 30
-	queryTimeout      = 15 * time.Second
+	maxRecursionDepth   = 30
+	defaultQueryTimeout = 15 * time.Second
 )
 
-var rootServerNames = []string{
+// RootServerNames contains the hostnames of the DNS root servers.
+// These are the authoritative nameservers for the root zone of the DNS hierarchy.
+var RootServerNames = []string{
 	"a.root-servers.net",
 	"b.root-servers.net",
 	"c.root-servers.net",
@@ -61,18 +63,24 @@ type Result struct {
 // The resolver is configured with appropriate timeouts and will handle
 // missing glue records automatically.
 func New() *Resolver {
-	return NewWithCacheSize(defaultCacheSize)
+	return NewWithCacheSize(defaultCacheSize, defaultQueryTimeout)
+}
+
+// NewWithTimeout creates a new DNS resolver with the specified timeout.
+// The timeout parameter determines how long to wait for DNS responses.
+func NewWithTimeout(timeout time.Duration) *Resolver {
+	return NewWithCacheSize(defaultCacheSize, timeout)
 }
 
 // NewWithCacheSize creates a new DNS resolver with the specified cache size.
 // The cacheSize parameter determines how many DNS responses can be cached
 // using an LRU eviction policy.
-func NewWithCacheSize(cacheSize int) *Resolver {
+func NewWithCacheSize(cacheSize int, timeout time.Duration) *Resolver {
 	return &Resolver{
 		client: dns.Client{
-			Timeout: queryTimeout,
+			Timeout: timeout,
 			Dialer: &net.Dialer{
-				Timeout: queryTimeout,
+				Timeout: timeout,
 			},
 		},
 		cache: newDNSCache(cacheSize),
@@ -89,7 +97,7 @@ func getRootServers() []string {
 func resolveRootServers() []string {
 	var servers []string
 
-	for _, name := range rootServerNames {
+	for _, name := range RootServerNames {
 		ips, err := net.LookupIP(name)
 		if err != nil {
 			continue
@@ -166,6 +174,73 @@ func (r *Resolver) ResolveAll(domain string, qtype uint16) (*Result, error) {
 	}
 
 	return result, nil
+}
+
+// LookupIP looks up host using the resolver and returns a slice of that host's IP addresses.
+// It works like net.LookupIP but uses the recursive resolver instead of the system resolver.
+// The function queries both A and AAAA records and returns all found IP addresses.
+func (r *Resolver) LookupIP(host string) ([]net.IP, error) {
+	var ips []net.IP
+
+	// Query A records (IPv4)
+	resultA, err := r.Resolve(host, dns.TypeA)
+	if err == nil && resultA.Rcode == dns.RcodeSuccess {
+		for _, rr := range resultA.Answer {
+			if a, ok := rr.(*dns.A); ok {
+				ips = append(ips, a.A)
+			}
+		}
+	}
+
+	// Query AAAA records (IPv6)
+	resultAAAA, err := r.Resolve(host, dns.TypeAAAA)
+	if err == nil && resultAAAA.Rcode == dns.RcodeSuccess {
+		for _, rr := range resultAAAA.Answer {
+			if aaaa, ok := rr.(*dns.AAAA); ok {
+				ips = append(ips, aaaa.AAAA)
+			}
+		}
+	}
+
+	if len(ips) == 0 {
+		return nil, fmt.Errorf("no IP addresses found for %s", host)
+	}
+
+	return ips, nil
+}
+
+// LookupIPAll looks up host using the resolver and returns a slice of that host's IP addresses
+// from ALL authoritative nameservers. It works like LookupIP but uses ResolveAll instead of Resolve,
+// ensuring that IP addresses from all nameservers are collected and returned.
+// The function queries both A and AAAA records and returns all found IP addresses.
+func (r *Resolver) LookupIPAll(host string) ([]net.IP, error) {
+	var ips []net.IP
+
+	// Query A records (IPv4) from all nameservers
+	resultA, err := r.ResolveAll(host, dns.TypeA)
+	if err == nil && resultA.Rcode == dns.RcodeSuccess {
+		for _, rr := range resultA.Answer {
+			if a, ok := rr.(*dns.A); ok {
+				ips = append(ips, a.A)
+			}
+		}
+	}
+
+	// Query AAAA records (IPv6) from all nameservers
+	resultAAAA, err := r.ResolveAll(host, dns.TypeAAAA)
+	if err == nil && resultAAAA.Rcode == dns.RcodeSuccess {
+		for _, rr := range resultAAAA.Answer {
+			if aaaa, ok := rr.(*dns.AAAA); ok {
+				ips = append(ips, aaaa.AAAA)
+			}
+		}
+	}
+
+	if len(ips) == 0 {
+		return nil, fmt.Errorf("no IP addresses found for %s", host)
+	}
+
+	return ips, nil
 }
 
 func (r *Resolver) makeCacheKey(domain string, qtype uint16) string {
