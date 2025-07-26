@@ -3,7 +3,7 @@
 # `--tags` ensures any tag is considered, not just annotated ones.
 # `--always` ensures that if no tags are present, the commit hash is used.
 # `--dirty` will append "-dirty" if the working directory has uncommitted changes.
-VERSION := $(shell git describe --tags --always --dirty)
+VERSION ?= $(shell git describe --tags --always --dirty)
 
 # Release target to create a new semantic version tag
 .PHONY: release-tag

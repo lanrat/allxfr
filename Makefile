@@ -17,7 +17,7 @@ run-unbound:
 	docker run -it --rm --name unbound -p 127.0.0.1:5053:5053/udp lanrat/unbound
 
 docker: Dockerfile $(SOURCES) go.mod go.sum
-	docker build -t="lanrat/allxfr" .
+	docker build --build-arg VERSION=${VERSION} -t="lanrat/allxfr" .
 
 $(BIN): $(SOURCES) go.mod go.sum
 	$(CC) -o $@ 
