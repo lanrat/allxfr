@@ -50,11 +50,17 @@ func axfrWorker(ctx context.Context, z zone.Zone, domain string) error {
 	//var records int64
 	var anySuccess bool
 	for _, nameserver := range z.NS[domain] {
+		// Check for context cancellation
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
 		for _, ip := range z.IP[nameserver] {
 			ipString := ip.To16().String()
 			if !attemptedIPs[ipString] {
 				attemptedIPs[ipString] = true
-				anySuccess, err = axfrRetry(ip, domain, nameserver)
+				anySuccess, err = axfrRetry(ctx, ip, domain, nameserver)
 				if err != nil {
 					continue
 				}
@@ -80,10 +86,20 @@ func axfrWorker(ctx context.Context, z zone.Zone, domain string) error {
 			}
 			break
 		}
-		time.Sleep(1 * time.Second)
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(1 * time.Second):
+		}
 	}
 
 	for _, nameserver := range qNameservers {
+		// Check for context cancellation
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
 		var qIPs []net.IP
 		for try := 0; try < *retry; try++ {
 			qIPs, err = resolve.LookupIPAll(ctx, nameserver)
@@ -92,15 +108,25 @@ func axfrWorker(ctx context.Context, z zone.Zone, domain string) error {
 			} else {
 				break
 			}
-			time.Sleep(1 * time.Second)
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(1 * time.Second):
+			}
 		}
 
 		for _, ip := range qIPs {
+			// Check for context cancellation
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			default:
+			}
 			ipString := ip.To16().String()
 			if !attemptedIPs[ipString] {
 				attemptedIPs[ipString] = true
 				v("[%s] trying non-glue AXFR: %s %s", domain, nameserver, ip.String())
-				anySuccess, err = axfrRetry(ip, domain, nameserver)
+				anySuccess, err = axfrRetry(ctx, ip, domain, nameserver)
 				if err != nil {
 					continue
 				}
@@ -124,13 +150,13 @@ func axfrWorker(ctx context.Context, z zone.Zone, domain string) error {
 // It retries failed transfers up to the configured retry count, but skips
 // retries if the nameserver explicitly doesn't support AXFR.
 // Returns (success, error) where success indicates if any records were transferred.
-func axfrRetry(ip net.IP, domain, nameserver string) (bool, error) {
+func axfrRetry(ctx context.Context, ip net.IP, domain, nameserver string) (bool, error) {
 	var err error
 	var records int64
 	var anySuccess bool
 
 	for try := 0; try < *retry; try++ {
-		records, err = axfr(domain, nameserver, ip)
+		records, err = axfr(ctx, domain, nameserver, ip)
 		if err != nil {
 			v("[%s] %s", domain, err)
 			// if axfr is unsupported by NS, then move on, otherwise retry
@@ -145,7 +171,11 @@ func axfrRetry(ip net.IP, domain, nameserver string) (bool, error) {
 				break
 			}
 		}
-		time.Sleep(1 * time.Second)
+		select {
+		case <-ctx.Done():
+			return anySuccess, ctx.Err()
+		case <-time.After(1 * time.Second):
+		}
 	}
 	if !*saveAll && records != 0 {
 		return anySuccess, nil
@@ -161,9 +191,9 @@ func axfrRetry(ip net.IP, domain, nameserver string) (bool, error) {
 // It calls axfrToFile to perform the actual transfer and updates global
 // transfer statistics and status server on success.
 // Returns the number of records transferred.
-func axfr(domain, nameserver string, ip net.IP) (int64, error) {
+func axfr(ctx context.Context, domain, nameserver string, ip net.IP) (int64, error) {
 	startTime := time.Now()
-	records, err := axfrToFile(domain, ip, nameserver)
+	records, err := axfrToFile(ctx, domain, ip, nameserver)
 	if err == nil && records > 0 {
 		took := time.Since(startTime).Round(time.Millisecond)
 		log.Printf("[%s] %s (%s) xfr size: %d records in %s\n", domain, nameserver, ip.String(), records, took.String())
@@ -177,11 +207,41 @@ func axfr(domain, nameserver string, ip net.IP) (int64, error) {
 	return records, err
 }
 
+// InContext performs a DNS zone transfer using the provided context and connection address.
+// It creates a TCP connection with context support and returns a channel of DNS envelopes
+// containing the transferred zone records. The transfer respects the context's cancellation
+// and uses global timeout settings for the connection operations.
+// It wraps miekg/dns.Transfer.In() with a Context
+func InContext(ctx context.Context, q *dns.Msg, a string) (env chan *dns.Envelope, err error) {
+	// Create a dialer with context
+	dialer := &net.Dialer{
+		Timeout: globalTimeout,
+	}
+
+	// Dial with context
+	conn, err := dialer.DialContext(ctx, "tcp", a)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create DNS connection wrapper
+	dnsConn := &dns.Conn{Conn: conn}
+
+	// Create transfer with pre-configured connection
+	transfer := &dns.Transfer{
+		Conn:         dnsConn,
+		DialTimeout:  globalTimeout,
+		ReadTimeout:  globalTimeout,
+		WriteTimeout: globalTimeout,
+	}
+	return transfer.In(q, a)
+}
+
 // axfrToFile performs an AXFR or IXFR request and saves the results to a compressed file.
 // It handles file creation, DNS transfer setup with timeouts, and processes each
 // envelope of records. Returns the number of records transferred or -1 if the file
 // already exists and overwrite is disabled.
-func axfrToFile(zone string, ip net.IP, nameserver string) (int64, error) {
+func axfrToFile(ctx context.Context, zone string, ip net.IP, nameserver string) (int64, error) {
 	zone = dns.Fqdn(zone)
 
 	m := new(dns.Msg)
@@ -191,11 +251,7 @@ func axfrToFile(zone string, ip net.IP, nameserver string) (int64, error) {
 		m.SetQuestion(zone, dns.TypeAXFR)
 	}
 
-	t := new(dns.Transfer)
-	t.DialTimeout = globalTimeout
-	t.ReadTimeout = globalTimeout
-	t.WriteTimeout = globalTimeout
-	env, err := t.In(m, net.JoinHostPort(ip.String(), "53"))
+	env, err := InContext(ctx, m, net.JoinHostPort(ip.String(), "53"))
 	if err != nil {
 		// skip on this error
 		err = fmt.Errorf("transfer error from zone: %s ip: %s: %w", zone, ip.String(), err)
@@ -251,6 +307,12 @@ func axfrToFile(zone string, ip net.IP, nameserver string) (int64, error) {
 	}
 
 	for e := range env {
+		// Check for context cancellation
+		select {
+		case <-ctx.Done():
+			return zonefile.Records(), ctx.Err()
+		default:
+		}
 		if e.Error != nil {
 			err = ErrorAxfrUnsupportedWrap(e.Error)
 			// skip on this error
