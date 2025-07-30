@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log"
@@ -42,7 +43,7 @@ func ErrorAxfrUnsupportedWrap(err error) error {
 // axfrWorker attempts zone transfers for a domain using all available nameservers and IPs.
 // It tries both glue records from the zone data and performs additional NS queries
 // to discover non-glue nameserver IPs. Returns nil if any transfer succeeds.
-func axfrWorker(z zone.Zone, domain string) error {
+func axfrWorker(ctx context.Context, z zone.Zone, domain string) error {
 	attemptedIPs := make(map[string]bool)
 	domain = dns.Fqdn(domain)
 	var err error
@@ -68,7 +69,7 @@ func axfrWorker(z zone.Zone, domain string) error {
 	// query NS and run axfr on missing IPs
 	var qNameservers []string
 	for try := 0; try < *retry; try++ {
-		result, err := resolve.Resolve(domain, dns.TypeNS)
+		result, err := resolve.Resolve(ctx, domain, dns.TypeNS)
 		if err != nil {
 			v("[%s] %s", domain, err)
 		} else {
@@ -85,7 +86,7 @@ func axfrWorker(z zone.Zone, domain string) error {
 	for _, nameserver := range qNameservers {
 		var qIPs []net.IP
 		for try := 0; try < *retry; try++ {
-			qIPs, err = resolve.LookupIPAll(nameserver)
+			qIPs, err = resolve.LookupIPAll(ctx, nameserver)
 			if err != nil {
 				v("[%s] %s", domain, err)
 			} else {

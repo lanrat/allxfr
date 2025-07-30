@@ -1,6 +1,7 @@
 package resolver
 
 import (
+	"context"
 	"net"
 	"sort"
 	"testing"
@@ -16,9 +17,11 @@ func TestResolverA(t *testing.T) {
 		"cloudflare.com",
 	}
 
+	ctx := context.Background()
+
 	for _, domain := range testDomains {
 		t.Run(domain, func(t *testing.T) {
-			result, err := resolver.Resolve(domain, dns.TypeA)
+			result, err := resolver.Resolve(ctx, domain, dns.TypeA)
 			if err != nil {
 				t.Fatalf("Failed to resolve %s: %v", domain, err)
 			}
@@ -71,9 +74,11 @@ func TestResolverAAAA(t *testing.T) {
 		"cloudflare.com",
 	}
 
+	ctx := context.Background()
+
 	for _, domain := range testDomains {
 		t.Run(domain, func(t *testing.T) {
-			result, err := resolver.Resolve(domain, dns.TypeAAAA)
+			result, err := resolver.Resolve(ctx, domain, dns.TypeAAAA)
 			if err != nil {
 				t.Logf("No AAAA records for %s: %v", domain, err)
 				return
@@ -121,9 +126,11 @@ func TestResolverNS(t *testing.T) {
 		"github.com",
 	}
 
+	ctx := context.Background()
+
 	for _, domain := range testDomains {
 		t.Run(domain, func(t *testing.T) {
-			result, err := resolver.Resolve(domain, dns.TypeNS)
+			result, err := resolver.Resolve(ctx, domain, dns.TypeNS)
 			if err != nil {
 				t.Fatalf("Failed to resolve %s NS: %v", domain, err)
 			}
@@ -168,9 +175,11 @@ func TestResolverCNAME(t *testing.T) {
 		"www.github.com",
 	}
 
+	ctx := context.Background()
+
 	for _, domain := range testDomains {
 		t.Run(domain, func(t *testing.T) {
-			result, err := resolver.Resolve(domain, dns.TypeCNAME)
+			result, err := resolver.Resolve(ctx, domain, dns.TypeCNAME)
 			if err != nil {
 				t.Fatalf("Failed to resolve %s CNAME: %v", domain, err)
 			}
@@ -207,7 +216,9 @@ func TestResolverNXDOMAIN(t *testing.T) {
 	resolver := New()
 	nonexistentDomain := "this-does-not-exist-12345.com"
 
-	result, err := resolver.Resolve(nonexistentDomain, dns.TypeA)
+	ctx := context.Background()
+
+	result, err := resolver.Resolve(ctx, nonexistentDomain, dns.TypeA)
 
 	if err != nil {
 		t.Fatalf("Unexpected error for NXDOMAIN: %v", err)
@@ -221,7 +232,7 @@ func TestResolverNXDOMAIN(t *testing.T) {
 func TestRootServerResolution(t *testing.T) {
 	t.Logf("Testing TestRootServerResolution")
 
-	rootServers := getRootServers()
+	rootServers := getRootServers(context.Background())
 	if len(rootServers) == 0 {
 		t.Fatal("No root servers resolved")
 	}
@@ -290,14 +301,16 @@ func TestResolverResolveAll(t *testing.T) {
 		"github.com",
 	}
 
+	ctx := context.Background()
+
 	for _, domain := range testDomains {
 		t.Run(domain, func(t *testing.T) {
-			resultAll, err := resolver.ResolveAll(domain, dns.TypeA)
+			resultAll, err := resolver.ResolveAll(ctx, domain, dns.TypeA)
 			if err != nil {
 				t.Fatalf("Failed to resolve %s with ResolveAll: %v", domain, err)
 			}
 
-			resultNormal, err := resolver.Resolve(domain, dns.TypeA)
+			resultNormal, err := resolver.Resolve(ctx, domain, dns.TypeA)
 			if err != nil {
 				t.Fatalf("Failed to resolve %s with Resolve: %v", domain, err)
 			}
@@ -343,9 +356,11 @@ func TestResolverLookupIP(t *testing.T) {
 		"cloudflare.com",
 	}
 
+	ctx := context.Background()
+
 	for _, domain := range testDomains {
 		t.Run(domain, func(t *testing.T) {
-			resolverIPs, err := resolver.LookupIP(domain)
+			resolverIPs, err := resolver.LookupIP(ctx, domain)
 			if err != nil {
 				t.Fatalf("Failed to lookup IP for %s: %v", domain, err)
 			}
@@ -401,15 +416,16 @@ func TestResolverLookupIPAll(t *testing.T) {
 		"github.com",
 		"cloudflare.com",
 	}
+	ctx := context.Background()
 
 	for _, domain := range testDomains {
 		t.Run(domain, func(t *testing.T) {
-			allIPs, err := resolver.LookupIPAll(domain)
+			allIPs, err := resolver.LookupIPAll(ctx, domain)
 			if err != nil {
 				t.Fatalf("Failed to lookup IP with LookupIPAll for %s: %v", domain, err)
 			}
 
-			normalIPs, err := resolver.LookupIP(domain)
+			normalIPs, err := resolver.LookupIP(ctx, domain)
 			if err != nil {
 				t.Fatalf("Failed to lookup IP with LookupIP for %s: %v", domain, err)
 			}

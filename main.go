@@ -4,6 +4,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log"
@@ -126,12 +127,14 @@ func main() {
 		z.PrintTree()
 	}
 
+	ctx := context.Background()
+
 	zoneChan := z.GetNameChan()
 	var g errgroup.Group
 
 	// start workers
 	for i := uint(0); i < *parallel; i++ {
-		g.Go(func() error { return worker(z, zoneChan) })
+		g.Go(func() error { return worker(ctx, z, zoneChan) })
 	}
 
 	err = g.Wait()
@@ -144,7 +147,7 @@ func main() {
 // worker processes domains from the channel and attempts zone transfers.
 // It receives domain names from the channel and calls axfrWorker to attempt
 // zone transfers for each domain. Updates the status server with transfer progress.
-func worker(z zone.Zone, c chan string) error {
+func worker(ctx context.Context, z zone.Zone, c chan string) error {
 	for {
 		domain, more := <-c
 		if !more {
@@ -156,7 +159,7 @@ func worker(z zone.Zone, c chan string) error {
 			statusServer.StartTransfer(domain)
 		}
 
-		err := axfrWorker(z, domain)
+		err := axfrWorker(ctx, z, domain)
 		if err != nil {
 			if statusServer != nil {
 				statusServer.FailTransfer(domain, err.Error())

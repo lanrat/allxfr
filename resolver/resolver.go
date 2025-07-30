@@ -104,9 +104,9 @@ func NewWithCacheSize(cacheSize int, timeout time.Duration) *Resolver {
 
 // getRootServers returns the cached list of root server IP addresses.
 // It uses sync.Once to ensure root servers are resolved only once per program execution.
-func getRootServers() []string {
+func getRootServers(ctx context.Context) []string {
 	rootServersOnce.Do(func() {
-		rootServers = resolveRootServers()
+		rootServers = resolveRootServers(ctx)
 	})
 	return rootServers
 }
@@ -114,24 +114,30 @@ func getRootServers() []string {
 // resolveRootServers resolves all root server hostnames to IP addresses in parallel.
 // It looks up both IPv4 and IPv6 addresses for each root server and returns
 // them as "ip:port" strings ready for DNS queries.
-func resolveRootServers() []string {
+func resolveRootServers(ctx context.Context) []string {
 	var servers []string
 	var mu sync.Mutex
 	var wg sync.WaitGroup
+
+	// Create a context with timeout for root server resolution
+	resolveCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
 
 	// Resolve all root servers in parallel
 	for _, name := range RootServerNames {
 		wg.Add(1)
 		go func(hostname string) {
 			defer wg.Done()
-			ips, err := net.LookupIP(hostname)
+			
+			netResolver := &net.Resolver{}
+			ips, err := netResolver.LookupIPAddr(resolveCtx, hostname)
 			if err != nil {
 				return
 			}
 
 			mu.Lock()
 			for _, ip := range ips {
-				servers = append(servers, net.JoinHostPort(ip.String(), "53"))
+				servers = append(servers, net.JoinHostPort(ip.IP.String(), "53"))
 			}
 			mu.Unlock()
 		}(name)
@@ -150,7 +156,7 @@ func resolveRootServers() []string {
 //
 // Returns a Result containing the DNS response sections and metadata, or an error
 // if the resolution fails.
-func (r *Resolver) Resolve(domain string, qtype uint16) (*Result, error) {
+func (r *Resolver) Resolve(ctx context.Context, domain string, qtype uint16) (*Result, error) {
 	domain = dns.Fqdn(domain)
 
 	cacheKey := r.makeCacheKey(domain, qtype)
@@ -158,7 +164,7 @@ func (r *Resolver) Resolve(domain string, qtype uint16) (*Result, error) {
 		return cached, nil
 	}
 
-	result, err := r.resolveRecursive(domain, qtype, getRootServers(), 0)
+	result, err := r.resolveRecursive(ctx, domain, qtype, getRootServers(ctx), 0)
 	if err != nil {
 		return nil, err
 	}
@@ -193,7 +199,7 @@ func (r *Resolver) Resolve(domain string, qtype uint16) (*Result, error) {
 //
 // Returns a Result containing the merged DNS response sections from all nameservers,
 // or an error if the resolution fails.
-func (r *Resolver) ResolveAll(domain string, qtype uint16) (*Result, error) {
+func (r *Resolver) ResolveAll(ctx context.Context, domain string, qtype uint16) (*Result, error) {
 	domain = dns.Fqdn(domain)
 
 	cacheKey := r.makeCacheKey(domain+"_ALL", qtype)
@@ -201,7 +207,7 @@ func (r *Resolver) ResolveAll(domain string, qtype uint16) (*Result, error) {
 		return cached, nil
 	}
 
-	result, err := r.resolveRecursiveAll(domain, qtype, getRootServers(), 0)
+	result, err := r.resolveRecursiveAll(ctx, domain, qtype, getRootServers(ctx), 0)
 	if err != nil {
 		return nil, err
 	}
@@ -229,11 +235,11 @@ func (r *Resolver) ResolveAll(domain string, qtype uint16) (*Result, error) {
 // LookupIP looks up host using the resolver and returns a slice of that host's IP addresses.
 // It works like net.LookupIP but uses the recursive resolver instead of the system resolver.
 // The function queries both A and AAAA records and returns all found IP addresses.
-func (r *Resolver) LookupIP(host string) ([]net.IP, error) {
+func (r *Resolver) LookupIP(ctx context.Context, host string) ([]net.IP, error) {
 	var ips []net.IP
 
 	// Query A records (IPv4)
-	resultA, err := r.Resolve(host, dns.TypeA)
+	resultA, err := r.Resolve(ctx, host, dns.TypeA)
 	if err == nil && resultA.Rcode == dns.RcodeSuccess {
 		for _, rr := range resultA.Answer {
 			if a, ok := rr.(*dns.A); ok {
@@ -243,7 +249,7 @@ func (r *Resolver) LookupIP(host string) ([]net.IP, error) {
 	}
 
 	// Query AAAA records (IPv6)
-	resultAAAA, err := r.Resolve(host, dns.TypeAAAA)
+	resultAAAA, err := r.Resolve(ctx, host, dns.TypeAAAA)
 	if err == nil && resultAAAA.Rcode == dns.RcodeSuccess {
 		for _, rr := range resultAAAA.Answer {
 			if aaaa, ok := rr.(*dns.AAAA); ok {
@@ -263,7 +269,7 @@ func (r *Resolver) LookupIP(host string) ([]net.IP, error) {
 // from ALL authoritative nameservers. It works like LookupIP but uses ResolveAll instead of Resolve,
 // ensuring that IP addresses from all nameservers are collected and returned.
 // The function queries both A and AAAA records in parallel and returns all found IP addresses.
-func (r *Resolver) LookupIPAll(host string) ([]net.IP, error) {
+func (r *Resolver) LookupIPAll(ctx context.Context, host string) ([]net.IP, error) {
 	// Query A and AAAA records in parallel
 	type resolveResult struct {
 		result *Result
@@ -275,35 +281,39 @@ func (r *Resolver) LookupIPAll(host string) ([]net.IP, error) {
 
 	// Query A records (IPv4) from all nameservers
 	go func() {
-		result, err := r.ResolveAll(host, dns.TypeA)
+		result, err := r.ResolveAll(ctx, host, dns.TypeA)
 		aChan <- resolveResult{result: result, err: err}
 	}()
 
 	// Query AAAA records (IPv6) from all nameservers
 	go func() {
-		result, err := r.ResolveAll(host, dns.TypeAAAA)
+		result, err := r.ResolveAll(ctx, host, dns.TypeAAAA)
 		aaaaChan <- resolveResult{result: result, err: err}
 	}()
 
 	var ips []net.IP
 
-	// Collect A record results
-	aResult := <-aChan
-	if aResult.err == nil && aResult.result.Rcode == dns.RcodeSuccess {
-		for _, rr := range aResult.result.Answer {
-			if a, ok := rr.(*dns.A); ok {
-				ips = append(ips, a.A)
+	// Collect A and AAAA record results with context cancellation support
+	for i := 0; i < 2; i++ {
+		select {
+		case aResult := <-aChan:
+			if aResult.err == nil && aResult.result.Rcode == dns.RcodeSuccess {
+				for _, rr := range aResult.result.Answer {
+					if a, ok := rr.(*dns.A); ok {
+						ips = append(ips, a.A)
+					}
+				}
 			}
-		}
-	}
-
-	// Collect AAAA record results
-	aaaaResult := <-aaaaChan
-	if aaaaResult.err == nil && aaaaResult.result.Rcode == dns.RcodeSuccess {
-		for _, rr := range aaaaResult.result.Answer {
-			if aaaa, ok := rr.(*dns.AAAA); ok {
-				ips = append(ips, aaaa.AAAA)
+		case aaaaResult := <-aaaaChan:
+			if aaaaResult.err == nil && aaaaResult.result.Rcode == dns.RcodeSuccess {
+				for _, rr := range aaaaResult.result.Answer {
+					if aaaa, ok := rr.(*dns.AAAA); ok {
+						ips = append(ips, aaaa.AAAA)
+					}
+				}
 			}
+		case <-ctx.Done():
+			return nil, ctx.Err()
 		}
 	}
 
@@ -465,7 +475,7 @@ func (r *Resolver) calculateTTL(result *Result) time.Duration {
 	return time.Duration(minTTL) * time.Second
 }
 
-func (r *Resolver) resolveRecursive(domain string, qtype uint16, nameservers []string, depth int) (*Result, error) {
+func (r *Resolver) resolveRecursive(ctx context.Context, domain string, qtype uint16, nameservers []string, depth int) (*Result, error) {
 	if depth > maxRecursionDepth {
 		return nil, fmt.Errorf("maximum recursion depth exceeded")
 	}
@@ -478,7 +488,13 @@ func (r *Resolver) resolveRecursive(domain string, qtype uint16, nameservers []s
 	sortedNS := r.sortNameserversByRTT(nameservers)
 
 	for _, ns := range sortedNS {
-		result, err := r.queryNameserver(ns, domain, qtype)
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
+		}
+		
+		result, err := r.queryNameserver(ctx, ns, domain, qtype)
 		if err != nil {
 			continue
 		}
@@ -491,7 +507,7 @@ func (r *Resolver) resolveRecursive(domain string, qtype uint16, nameservers []s
 		}
 
 		if len(result.Answer) > 0 {
-			result.Answer = r.followCNAME(result.Answer, qtype, depth)
+			result.Answer = r.followCNAME(ctx, result.Answer, qtype, depth)
 			return result, nil
 		}
 
@@ -501,19 +517,19 @@ func (r *Resolver) resolveRecursive(domain string, qtype uint16, nameservers []s
 				continue
 			}
 
-			nextNS := r.resolveNameservers(nsRecords, result.Additional)
+			nextNS := r.resolveNameservers(ctx, nsRecords, result.Additional)
 			if len(nextNS) == 0 {
 				continue
 			}
 
-			return r.resolveRecursive(domain, qtype, nextNS, depth+1)
+			return r.resolveRecursive(ctx, domain, qtype, nextNS, depth+1)
 		}
 	}
 
 	return nil, fmt.Errorf("no answer found for %s", domain)
 }
 
-func (r *Resolver) queryNameserver(nameserver, domain string, qtype uint16) (*Result, error) {
+func (r *Resolver) queryNameserver(ctx context.Context, nameserver, domain string, qtype uint16) (*Result, error) {
 	if !strings.Contains(nameserver, ":") {
 		nameserver = nameserver + ":53"
 	}
@@ -523,7 +539,7 @@ func (r *Resolver) queryNameserver(nameserver, domain string, qtype uint16) (*Re
 	m.RecursionDesired = false
 
 	start := time.Now()
-	resp, _, err := r.client.Exchange(m, nameserver)
+	resp, _, err := r.client.ExchangeContext(ctx, m, nameserver)
 	rtt := time.Since(start)
 
 	if err != nil {
@@ -542,14 +558,20 @@ func (r *Resolver) queryNameserver(nameserver, domain string, qtype uint16) (*Re
 	}, nil
 }
 
-func (r *Resolver) followCNAME(answers []dns.RR, originalType uint16, depth int) []dns.RR {
+func (r *Resolver) followCNAME(ctx context.Context, answers []dns.RR, originalType uint16, depth int) []dns.RR {
 	result := make([]dns.RR, 0, len(answers))
 
 	for _, rr := range answers {
+		select {
+		case <-ctx.Done():
+			return result // Return what we have so far
+		default:
+		}
+		
 		result = append(result, rr)
 
 		if cname, ok := rr.(*dns.CNAME); ok && originalType != dns.TypeCNAME {
-			cnameResult, err := r.resolveRecursive(cname.Target, originalType, getRootServers(), depth+1)
+			cnameResult, err := r.resolveRecursive(ctx, cname.Target, originalType, getRootServers(ctx), depth+1)
 			if err == nil && len(cnameResult.Answer) > 0 {
 				result = append(result, cnameResult.Answer...)
 			}
@@ -569,7 +591,7 @@ func (r *Resolver) extractNSRecords(authority []dns.RR) []string {
 	return nsRecords
 }
 
-func (r *Resolver) resolveNameservers(nsRecords []string, additional []dns.RR) []string {
+func (r *Resolver) resolveNameservers(ctx context.Context, nsRecords []string, additional []dns.RR) []string {
 	var nameservers []string
 	var mu sync.Mutex
 
@@ -605,11 +627,11 @@ func (r *Resolver) resolveNameservers(nsRecords []string, additional []dns.RR) [
 			wg.Add(1)
 			go func(hostname string) {
 				defer wg.Done()
-				ctx, cancel := context.WithTimeout(context.Background(), defaultQueryTimeout)
+				timeoutCtx, cancel := context.WithTimeout(ctx, defaultQueryTimeout)
 				defer cancel()
-				
+
 				resolver := &net.Resolver{}
-				ips, err := resolver.LookupIPAddr(ctx, hostname)
+				ips, err := resolver.LookupIPAddr(timeoutCtx, hostname)
 				if err == nil {
 					mu.Lock()
 					for _, ip := range ips {
@@ -689,7 +711,7 @@ func mergeResults(results []*Result) *Result {
 // resolveRecursiveAll performs recursive resolution by querying ALL nameservers
 // at each level and merging their responses, unlike resolveRecursive which stops
 // at the first successful response.
-func (r *Resolver) resolveRecursiveAll(domain string, qtype uint16, nameservers []string, depth int) (*Result, error) {
+func (r *Resolver) resolveRecursiveAll(ctx context.Context, domain string, qtype uint16, nameservers []string, depth int) (*Result, error) {
 	if depth > maxRecursionDepth {
 		return nil, fmt.Errorf("maximum recursion depth exceeded")
 	}
@@ -709,7 +731,7 @@ func (r *Resolver) resolveRecursiveAll(domain string, qtype uint16, nameservers 
 	// Start goroutines for each nameserver
 	for _, ns := range nameservers {
 		go func(nameserver string) {
-			result, err := r.queryNameserver(nameserver, domain, qtype)
+			result, err := r.queryNameserver(ctx, nameserver, domain, qtype)
 			resultChan <- queryResult{result: result, err: err}
 		}(ns)
 	}
@@ -719,13 +741,16 @@ func (r *Resolver) resolveRecursiveAll(domain string, qtype uint16, nameservers 
 	var hasSuccessfulQuery bool
 
 	for i := 0; i < len(nameservers); i++ {
-		qr := <-resultChan
-		if qr.err != nil {
-			continue
+		select {
+		case qr := <-resultChan:
+			if qr.err != nil {
+				continue
+			}
+			hasSuccessfulQuery = true
+			allResults = append(allResults, qr.result)
+		case <-ctx.Done():
+			return nil, ctx.Err()
 		}
-
-		hasSuccessfulQuery = true
-		allResults = append(allResults, qr.result)
 	}
 
 	if !hasSuccessfulQuery {
@@ -742,7 +767,7 @@ func (r *Resolver) resolveRecursiveAll(domain string, qtype uint16, nameservers 
 	}
 
 	if len(merged.Answer) > 0 {
-		merged.Answer = r.followCNAME(merged.Answer, qtype, depth)
+		merged.Answer = r.followCNAME(ctx, merged.Answer, qtype, depth)
 		return merged, nil
 	}
 
@@ -752,12 +777,12 @@ func (r *Resolver) resolveRecursiveAll(domain string, qtype uint16, nameservers 
 			return merged, nil
 		}
 
-		nextNS := r.resolveNameservers(nsRecords, merged.Additional)
+		nextNS := r.resolveNameservers(ctx, nsRecords, merged.Additional)
 		if len(nextNS) == 0 {
 			return merged, nil
 		}
 
-		return r.resolveRecursiveAll(domain, qtype, nextNS, depth+1)
+		return r.resolveRecursiveAll(ctx, domain, qtype, nextNS, depth+1)
 	}
 
 	return merged, nil

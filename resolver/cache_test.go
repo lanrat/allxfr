@@ -1,6 +1,7 @@
 package resolver
 
 import (
+	"context"
 	"net"
 	"testing"
 	"time"
@@ -12,13 +13,15 @@ func TestCacheBasicFunctionality(t *testing.T) {
 	resolver := NewWithCacheSize(10, defaultQueryTimeout)
 	domain := "google.com"
 
-	result1, err := resolver.Resolve(domain, dns.TypeA)
+	ctx := context.Background()
+
+	result1, err := resolver.Resolve(ctx, domain, dns.TypeA)
 	if err != nil {
 		t.Fatalf("Failed to resolve %s: %v", domain, err)
 	}
 
 	start := time.Now()
-	result2, err := resolver.Resolve(domain, dns.TypeA)
+	result2, err := resolver.Resolve(ctx, domain, dns.TypeA)
 	duration := time.Since(start)
 
 	if err != nil {
