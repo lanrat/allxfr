@@ -9,7 +9,9 @@ import (
 	"encoding/json"
 	"log"
 	"math"
+	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -39,6 +41,7 @@ type StatusResponse struct {
 	SuccessRate  float64   `json:"success_rate"`
 	TransferRate float64   `json:"transfer_rate_per_minute"`
 	RecentFailed []string  `json:"recent_failed,omitempty"`
+	ActiveZones  []string  `json:"active_zones,omitempty"`
 }
 
 // HealthResponse represents the JSON response for health endpoint
@@ -114,6 +117,15 @@ func (s *StatusServer) GetStatus() StatusResponse {
 	active := atomic.LoadUint32(&s.activeCount)
 	totalZones := atomic.LoadUint32(&s.totalZones)
 
+	// Collect active zone names
+	var activeZones []string
+	s.active.Range(func(key, value interface{}) bool {
+		if zone, ok := key.(string); ok {
+			activeZones = append(activeZones, zone)
+		}
+		return true // continue iteration
+	})
+
 	runtime := time.Since(s.startTime)
 	remaining := uint32(0)
 	if totalZones > completed+failed {
@@ -141,6 +153,7 @@ func (s *StatusServer) GetStatus() StatusResponse {
 		SuccessRate:  successRate,
 		TransferRate: transferRate,
 		RecentFailed: recentFailed,
+		ActiveZones:  activeZones,
 	}
 }
 
@@ -240,7 +253,7 @@ func (s *StatusServer) progressHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // StartStatusServer starts the HTTP status server in a separate goroutine
-func StartStatusServer(port string) *StatusServer {
+func StartStatusServer(addr string) *StatusServer {
 	statusServer := NewStatusServer()
 
 	mux := http.NewServeMux()
@@ -248,17 +261,35 @@ func StartStatusServer(port string) *StatusServer {
 	mux.HandleFunc("/health", statusServer.healthHandler)
 	mux.HandleFunc("/progress", statusServer.progressHandler)
 
+	// Parse address to handle both "port" and "ip:port" formats
+	var serverAddr string
+	if strings.Contains(addr, ":") {
+		// Already in host:port format
+		serverAddr = addr
+	} else {
+		// Just port, bind to all interfaces
+		serverAddr = ":" + addr
+	}
+
 	server := &http.Server{
-		Addr:    ":" + port,
+		Addr:    serverAddr,
 		Handler: mux,
 	}
 
 	go func() {
-		log.Printf("Status server starting on port %s", port)
-		log.Printf("Available endpoints:")
-		log.Printf("  http://localhost:%s/status   - Full status information", port)
-		log.Printf("  http://localhost:%s/progress - Progress summary", port)
-		log.Printf("  http://localhost:%s/health   - Health check", port)
+		host, port, err := net.SplitHostPort(serverAddr)
+		if err != nil {
+			log.Printf("Status server starting on %s", serverAddr)
+		} else {
+			if host == "" {
+				host = "localhost"
+			}
+			log.Printf("Status server starting on %s", serverAddr)
+			log.Printf("Available endpoints:")
+			log.Printf("  http://%s:%s/status   - Full status information", host, port)
+			log.Printf("  http://%s:%s/progress - Progress summary", host, port)
+			log.Printf("  http://%s:%s/health   - Health check", host, port)
+		}
 
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Printf("Status server error: %v", err)

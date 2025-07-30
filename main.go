@@ -32,7 +32,7 @@ var (
 	dryRun      = flag.Bool("dry-run", false, "only test if xfr is allowed by retrieving one envelope")
 	retry       = flag.Int("retry", 3, "number of times to retry failed operations")
 	overwrite   = flag.Bool("overwrite", false, "if zone already exists on disk, overwrite it with newer data")
-	statusPort  = flag.String("status-port", "", "enable HTTP status server on specified port (e.g., '8080')")
+	statusAddr  = flag.String("status-listen", "", "enable HTTP status server on specified [IP:]port (e.g., '8080', '127.0.0.1:8080', '[::1]:8080')")
 	showVersion = flag.Bool("version", false, "print version and exit") // Show version
 
 )
@@ -62,9 +62,9 @@ func main() {
 		log.Fatal("retry must be positive")
 	}
 
-	// Start HTTP status server if port is specified
-	if *statusPort != "" {
-		statusServer = status.StartStatusServer(*statusPort)
+	// Start HTTP status server if address is specified
+	if *statusAddr != "" {
+		statusServer = status.StartStatusServer(*statusAddr)
 	}
 
 	resolve = resolver.New()
