@@ -1,6 +1,8 @@
 {
     "version": "0.2",
-    "ignorePaths": [],
+    "ignorePaths": [
+        "go.mod"
+    ],
     "dictionaryDefinitions": [],
     "dictionaries": [],
     "words": [
@@ -17,6 +19,7 @@
         "lanrat",
         "miekg",
         "Minttl",
+        "netstack",
         "NOERROR",
         "NXDOMAIN",
         "publicsuffix",
@@ -24,6 +27,7 @@
         "Rcode",
         "Rrtype",
         "staticcheck",
+        "tnet",
         "trimpath",
         "weppos",
         "zonefile"

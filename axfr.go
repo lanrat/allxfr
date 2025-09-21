@@ -213,13 +213,19 @@ func axfr(ctx context.Context, domain, nameserver string, ip net.IP) (int64, err
 // and uses global timeout settings for the connection operations.
 // It wraps miekg/dns.Transfer.In() with a Context
 func InContext(ctx context.Context, q *dns.Msg, a string) (env chan *dns.Envelope, err error) {
-	// Create a dialer with context
-	dialer := &net.Dialer{
-		Timeout: globalTimeout,
-	}
-
 	// Dial with context
-	conn, err := dialer.DialContext(ctx, "tcp", a)
+	var conn net.Conn
+
+	if tnet != nil {
+		// Use the virtual network interface
+		conn, err = tnet.DialContext(ctx, "tcp", a)
+	} else {
+		// Create a dialer with context
+		dialer := &net.Dialer{
+			Timeout: globalTimeout,
+		}
+		conn, err = dialer.DialContext(ctx, "tcp", a)
+	}
 	if err != nil {
 		return nil, err
 	}
