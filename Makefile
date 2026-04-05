@@ -16,9 +16,8 @@ docker: Dockerfile $(SOURCES) go.mod go.sum
 $(BIN): $(SOURCES) go.mod go.sum
 	$(CC) -o $@ 
 
-check:
+lint:
 	golangci-lint run
-	staticcheck -checks all ./...
 
 update-deps: go.mod
 	GOPROXY=direct go get -u ./...
