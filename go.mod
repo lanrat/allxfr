@@ -3,6 +3,7 @@ module github.com/lanrat/allxfr
 go 1.23.0
 
 require (
+	github.com/lanrat/czds v1.4.0
 	github.com/miekg/dns v1.1.67
 	github.com/weppos/publicsuffix-go v0.40.2
 	golang.org/x/sync v0.16.0

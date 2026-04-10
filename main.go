@@ -12,11 +12,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lanrat/allxfr/psl"
 	"github.com/lanrat/allxfr/resolver"
 	"github.com/lanrat/allxfr/status"
 	"github.com/lanrat/allxfr/zone"
-
-	"github.com/lanrat/allxfr/psl"
+	"github.com/lanrat/czds/cmd/webhook"
 
 	"golang.org/x/sync/errgroup"
 )
@@ -38,10 +38,11 @@ var (
 )
 
 var (
-	version      = "dev" // Version string, set at build time
-	totalXFR     uint32
-	resolve      *resolver.Resolver
-	statusServer *status.StatusServer
+	version       = "dev" // Version string, set at build time
+	totalXFR      uint32
+	resolve       *resolver.Resolver
+	statusServer  *status.StatusServer
+	webhookClient *webhook.Client
 )
 
 const (
@@ -67,10 +68,21 @@ func main() {
 		statusServer = status.StartStatusServer(*statusAddr)
 	}
 
+	// Initialize webhook client from environment variables
+	var err error
+	webhookClient, err = webhook.NewFromEnv()
+	check(err)
+	if webhookClient != nil {
+		webhookClient.SetHeader("User-Agent", fmt.Sprintf("lanrat/allxfr %s", version))
+		webhookClient.SetHeader("X-Zone-Source", "axfr")
+		if *verbose {
+			webhookClient.SetLogger(log.Default())
+		}
+	}
+
 	resolve = resolver.New()
 	start := time.Now()
 	var z zone.Zone
-	var err error
 
 	if len(*zonefile) > 1 {
 		// zone file is provided
@@ -111,6 +123,30 @@ func main() {
 		v("added %d domains from PSL\n", len(pslDomains))
 	}
 
+	ctx := context.Background()
+
+	// Batch pre-check: filter zones before any AXFR attempts
+	if webhookClient != nil && webhookClient.PrecheckEnabled() {
+		zoneNames := make([]string, 0, len(z.NS))
+		for domain := range z.NS {
+			zoneNames = append(zoneNames, strings.TrimSuffix(domain, "."))
+		}
+		dateStr := time.Now().Format(time.DateOnly)
+		approvedZones, err := webhookClient.BatchPreDownloadCheck(ctx, zoneNames, dateStr)
+		if err != nil {
+			log.Printf("Warning: webhook pre-check failed, proceeding with all zones: %v", err)
+		} else {
+			skipped := 0
+			for domain := range z.NS {
+				if !approvedZones[strings.TrimSuffix(domain, ".")] {
+					delete(z.NS, domain)
+					skipped++
+				}
+			}
+			log.Printf("Webhook pre-check: %d approved, %d skipped", len(z.NS), skipped)
+		}
+	}
+
 	if statusServer != nil {
 		statusServer.IncrementTotalZones(uint32(z.CountNS()))
 	}
@@ -126,8 +162,6 @@ func main() {
 	if *verbose {
 		z.PrintTree()
 	}
-
-	ctx := context.Background()
 
 	zoneChan := z.GetNameChan()
 	var g errgroup.Group

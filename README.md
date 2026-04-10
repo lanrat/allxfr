@@ -73,6 +73,22 @@ Usage of ./allxfr:
         use the provided zonefile instead of getting the root zonefile
 ```
 
+## Webhook Support
+
+allxfr supports optional webhook integration for pre-transfer filtering and post-transfer notifications, configured via environment variables:
+
+```bash
+export PRECHECK_WEBHOOK_URL=https://example.com/check
+export NOTIFICATION_WEBHOOK_URL=https://example.com/notify
+```
+
+- **`PRECHECK_WEBHOOK_URL`** — before any transfers begin, all discovered zones are sent in a single batch request. Zones denied by the webhook are skipped entirely.
+- **`NOTIFICATION_WEBHOOK_URL`** — called immediately after each successful zone file is written, with the zone name and file path.
+
+Both are optional and independent. If neither is set, no webhook calls are made.
+
+For full request/response format documentation, see the [webhook package README](https://github.com/lanrat/czds/blob/main/cmd/webhook/README.md).
+
 ## Building
 
 ```console
