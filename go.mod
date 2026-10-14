@@ -6,7 +6,7 @@ require (
 	github.com/lanrat/czds v1.4.0
 	github.com/miekg/dns v1.1.73
 	github.com/weppos/publicsuffix-go v0.50.3
-	golang.org/x/sync v0.23.0
+	golang.org/x/sync v0.24.0
 )
 
 require (
